@@ -142,6 +142,9 @@
   .step:last-child { border-bottom: none; }
   .step-check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--text-faint); flex-shrink: 0; margin-top: 1px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.12s; }
   .step.done .step-check { background: var(--green); border-color: var(--green); color: #0c1220; }
+  .step:not(.done).prio-rood { box-shadow: inset 0 0 0 1px rgba(226,88,90,0.5), 0 0 14px 1px rgba(226,88,90,0.45); background: rgba(226,88,90,0.06); }
+  .step:not(.done).prio-oranje { box-shadow: inset 0 0 0 1px rgba(224,166,58,0.5), 0 0 14px 1px rgba(224,166,58,0.45); background: rgba(224,166,58,0.06); }
+  .step:not(.done).prio-groen { box-shadow: inset 0 0 0 1px rgba(76,175,125,0.5), 0 0 14px 1px rgba(76,175,125,0.45); background: rgba(76,175,125,0.06); }
   .step.active .step-check:hover { border-color: var(--text); }
   .step.locked { opacity: 0.4; }
   .step.locked .step-check { cursor: default; }
@@ -431,7 +434,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-06 23:45</div>
+<div class="build-tag">build 2026-07-07 00:18</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -1486,6 +1489,7 @@ async function openShow(showId, fromHistory, isShared) {
         ${stats.length ? `
         <div id="statsMonthWrap_${showId}"></div>
       ` : ''}
+      </div>
     </div>
     ${isShared ? '' : `<div id="showTabContent_project_${showId}" class="detail-tab-content hidden">${embeddedProjectShellHtml(showId)}</div>`}
   `;
@@ -1507,9 +1511,6 @@ function switchShowTab(showId, tabName) {
 // so this tab can never appear blank. Real data is loaded in afterward via loadEmbeddedProjectData.
 function embeddedProjectShellHtml(showId) {
   return `
-    <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-      ${recButtonHtml('recBtn_embed_' + showId, { showId })}
-    </div>
     <div class="detail-tabs">
       <button class="detail-tab-btn active" id="embedTabBtn_overzicht_${showId}" onclick="switchEmbedTab('${showId}','overzicht')">To-do's</button>
       <button class="detail-tab-btn" id="embedTabBtn_meetings_${showId}" onclick="switchEmbedTab('${showId}','meetings')">Meetings</button>
@@ -2679,7 +2680,7 @@ function stepHtml(projectId, s, trackUnlocked) {
   const blocked = s.status !== 'done' && subtasks.length > 0 && !allSubDone;
   const prio = s.priority || '';
   return `
-    <div class="step ${cls}" draggable="true" data-step-id="${s.id}">
+    <div class="step ${cls} prio-${prio||'none'}" draggable="true" data-step-id="${s.id}">
       <div class="step-check ${blocked?'blocked':''}" ${clickable ? `onclick="toggleStepClick('${projectId}','${s.track}',${s.order_num})"` : ''} title="${blocked ? 'Rond eerst alle subtaken af' : ''}">${s.status === 'done' ? '\u2713' : ''}</div>
       <div class="step-main">
         <div class="step-name" id="stepname_${s.id}">${escapeHtml(s.step_name)}</div>
