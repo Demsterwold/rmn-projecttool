@@ -1,0 +1,3043 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RMN Projecttool</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --panel-hover: #22262e; --border: #2b2f38;
+    --text: #e8e6e0; --text-dim: #8b8f99; --text-faint: #565b66;
+    --accent: #5b8def; --red: #d9534f; --orange: #e0a63a; --green: #4caf7d;
+    --c-productie: #7fd99a; --c-marketing: #e8b169; --c-distributie: #7fb8e8; --c-taken: #b89ae0;
+    --radius: 10px; --mono: 'SF Mono','IBM Plex Mono',Consolas,monospace; --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; max-width: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; }
+  header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin: 0; font-family: var(--mono); cursor: pointer; user-select: none; }
+  header h1:hover { opacity: 0.8; }
+  header h1 span { color: var(--text-faint); font-weight: 400; }
+  .header-actions { display: flex; gap: 10px; }
+  button { font-family: var(--sans); font-size: 13px; font-weight: 600; border-radius: 7px; border: 1px solid var(--border); cursor: pointer; padding: 8px 14px; background: var(--panel); color: var(--text); transition: background 0.15s, border-color 0.15s; }
+  button:hover { background: var(--panel-hover); border-color: #3a3f4a; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0c1220; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.primary:disabled { filter: none; opacity: 0.5; cursor: default; }
+  button.ghost { background: transparent; border-color: transparent; color: var(--text-dim); padding: 6px 8px; }
+  .auth-btn { font-size: 12px; opacity: 0.45; }
+  .auth-btn:hover { opacity: 0.8; }
+  button.icon { padding: 5px 9px; font-size: 13px; }
+  button.small { padding: 5px 10px; font-size: 12px; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .state-msg { color: var(--text-dim); font-size: 13px; padding: 40px 0; text-align: center; }
+  .state-msg button { margin-top: 10px; }
+
+  .cal-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-title { font-size: 22px; font-weight: 700; }
+  .cal-nav { display: flex; gap: 8px; }
+  .cal-grid { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--border); }
+  .cal-weekdays div { padding: 8px; text-align: center; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .cal-weeks { display: flex; flex-direction: column; }
+  .cal-week-wrap { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .cal-week-wrap:last-child { border-bottom: none; }
+  .cal-daynum-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-daynum-cell { border-right: 1px solid var(--border); padding: 6px 6px 0; }
+  .cal-daynum-cell:last-child { border-right: none; }
+  .cal-daynum-cell.other-month { opacity: 0.3; }
+  .cal-daynum { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+  .cal-daynum-cell.today .cal-daynum { background: var(--red); color: #fff; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; }
+  .cal-band-grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 3px; }
+  .cal-band { grid-row: 1; font-size: 9px; padding: 1px 6px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; font-weight: 600; line-height: 1.3; }
+  .cal-single-grid { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 2px; }
+  .cal-single-cell { padding: 0 6px; display: flex; flex-direction: column; gap: 2px; }
+  .cal-chip { font-size: 10px; padding: 2px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; color: #0c1220; font-weight: 600; }
+  .year-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 700px) { .year-grid { grid-template-columns: repeat(2, 1fr); } }
+  .year-month-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; min-height: 110px; }
+  .year-month-card.current { border-color: var(--accent); }
+  .year-month-label { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .year-month-pills { display: flex; flex-direction: column; gap: 3px; }
+  .year-month-empty { font-size: 11px; color: var(--text-faint); }
+
+  .proj-list { margin-top: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .proj-list h3 { margin: 0; padding: 14px 18px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+  .proj-row { display: grid; grid-template-columns: auto 1fr auto auto auto auto; gap: 16px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 13px; }
+  .proj-row:last-child { border-bottom: none; }
+  .proj-row:hover { background: var(--panel-hover); }
+  .proj-row .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .proj-row .p-name { font-weight: 600; }
+  .proj-row .p-period { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+  .proj-row .p-status { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
+  .status-in_productie { background: rgba(91,141,239,0.15); color: var(--accent); }
+  .status-live { background: rgba(76,175,125,0.15); color: var(--green); }
+  .p-countdown { font-family: var(--mono); font-size: 12px; color: var(--text-dim); white-space: nowrap; text-align: right; }
+  .p-countdown.soon { color: var(--orange); font-weight: 700; }
+  .p-countdown.overdue { color: var(--red); font-weight: 700; }
+  .proj-row-delete { opacity: 0; border: none; background: none; color: var(--text-faint); font-size: 15px; padding: 2px 6px; }
+  .proj-row:hover .proj-row-delete { opacity: 1; }
+  .proj-row-delete:hover { color: var(--red); }
+
+  .tl-controls { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
+  .tl-zoom { display: flex; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .tl-zoom button { border: none; background: transparent; padding: 5px 12px; font-size: 12px; border-radius: 6px; }
+  .tl-zoom button.active { background: var(--accent); color: #0c1220; }
+  .tl-nav { display: flex; align-items: center; gap: 8px; }
+  .tl-nav .tl-label { font-size: 13px; font-family: var(--mono); color: var(--text-dim); min-width: 140px; text-align: center; }
+  .timeline { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .tl-header { display: flex; border-bottom: 1px solid var(--border); }
+  .tl-header-spacer { width: 140px; flex-shrink: 0; border-right: 1px solid var(--border); }
+  .tl-header-cols { flex: 1; display: flex; position: relative; }
+  .tl-col-label { flex: 1; text-align: center; font-size: 10px; color: var(--text-faint); padding: 8px 2px; font-family: var(--mono); border-right: 1px solid rgba(255,255,255,0.03); white-space: nowrap; overflow: hidden; }
+  .tl-body { position: relative; }
+  .tl-row { display: flex; align-items: center; min-height: 44px; border-bottom: 1px solid var(--border); }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-row-label { width: 140px; flex-shrink: 0; padding: 8px 12px; border-right: 1px solid var(--border); cursor: pointer; }
+  .tl-proj-name { font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .tl-color-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .tl-row-track { flex: 1; position: relative; height: 44px; }
+  .tl-bar { position: absolute; top: 13px; height: 18px; border-radius: 5px; opacity: 0.9; display: flex; align-items: center; padding: 0 8px; overflow: hidden; }
+  .tl-bar-label { font-size: 10px; font-weight: 600; color: #0c1220; white-space: nowrap; }
+  .tl-outside { font-size: 11px; color: var(--text-faint); padding: 0 12px; }
+  .tl-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); z-index: 5; }
+  .tl-marker { position: absolute; top: 3px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg); transform: translateX(-50%); cursor: help; }
+
+  .detail-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px; justify-content: space-between; }
+  .detail-header-left { display: flex; align-items: center; gap: 12px; }
+  .back-btn { font-family: var(--mono); font-size: 12px; }
+  .detail-title-row { display: flex; align-items: center; gap: 8px; }
+  .detail-title { font-size: 22px; font-weight: 700; margin: 0; }
+  .detail-sub { font-size: 12px; color: var(--text-dim); font-family: var(--mono); margin-top: 2px; }
+  .edit-project-btn { font-size: 13px; opacity: 0.5; }
+  .edit-project-btn:hover { opacity: 1; }
+  .share-project-btn { font-size: 12px; font-weight: 600; opacity: 1; display: inline-flex; align-items: center; gap: 5px; }
+  .share-link-box { display: flex; gap: 8px; margin-top: 6px; }
+  .share-link-box input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text-dim); padding: 8px 10px; font-size: 12px; font-family: var(--mono); }
+  .countdown-badge { font-family: var(--mono); font-size: 12px; color: #c97a78; background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; white-space: nowrap; }
+  .detail-header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .live-toggle-btn { font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 20px; }
+  .live-toggle-btn.is-live { background: rgba(76,175,125,0.15); border-color: var(--green); color: var(--green); }
+  .countdown-badge.soon { color: var(--orange); border-color: var(--orange); }
+  .countdown-badge.overdue { color: var(--red); border-color: var(--red); }
+
+  .tracks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0 28px; align-items: start; }
+  .tracks.single { grid-template-columns: 1fr; max-width: 460px; }
+  @media (max-width: 800px) { .tracks { grid-template-columns: 1fr; } }
+  .track-col { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+  .track-head { padding: 12px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .track-head-left { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .p-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track-start-edit { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-faint); cursor: pointer; background: none; border: none; padding: 0; }
+  .track-start-edit:hover { color: var(--text); }
+
+  .step-list { display: flex; flex-direction: column; }
+  .step { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; display: flex; align-items: flex-start; gap: 8px; cursor: grab; }
+  .step.dragging { opacity: 0.4; }
+  .step.drag-over { border-top: 2px solid var(--accent); }
+  .step:hover .step-actions { opacity: 1; }
+  .step:last-child { border-bottom: none; }
+  .step-check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--text-faint); flex-shrink: 0; margin-top: 1px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.12s; }
+  .step.done .step-check { background: var(--green); border-color: var(--green); color: #0c1220; }
+  .step.active .step-check:hover { border-color: var(--text); }
+  .step.locked { opacity: 0.4; }
+  .step.locked .step-check { cursor: default; }
+  .step-main { flex: 1; min-width: 0; }
+  .step-name { line-height: 1.4; }
+  .step-name[contenteditable="true"] { outline: 1px dashed var(--accent); border-radius: 3px; padding: 0 2px; }
+  .step.done .step-name { color: var(--text-dim); text-decoration: line-through; text-decoration-color: var(--text-faint); }
+  .step-due { font-size: 10px; color: var(--text-faint); font-family: var(--mono); white-space: nowrap; margin-top: 1px; }
+  .step-note-text { font-size: 11px; color: var(--text-dim); margin-top: 3px; font-style: italic; cursor: pointer; }
+  .step-note-input { width: 100%; margin-top: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 5px 7px; font-size: 12px; font-family: var(--sans); resize: vertical; }
+  .step-actions { opacity: 0; display: flex; gap: 2px; flex-shrink: 0; transition: opacity 0.1s; }
+  .step-actions button { padding: 2px 5px; font-size: 11px; border: none; background: transparent; color: var(--text-faint); }
+  .step-actions button.has-note { color: var(--orange); }
+  .step-actions button:hover { color: var(--text); }
+  .add-step-row { padding: 8px 12px; display: flex; gap: 6px; }
+  .add-step-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 8px; font-size: 12px; }
+  .step.done { opacity: 0.55; }
+  .step { transition: opacity 0.22s ease, transform 0.22s ease; }
+  .step.fading { opacity: 0 !important; transform: translateY(6px); }
+  .subtask-list { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
+  .subtask { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); }
+  .subtask-check { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--text-faint); flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 9px; }
+  .subtask.done .subtask-check { background: var(--green); border-color: var(--green); color: #0c1220; }
+  .subtask.done .subtask-text { color: var(--text-faint); text-decoration: line-through; }
+  .subtask-text { flex: 1; cursor: pointer; }
+  .subtask-del { border: none; background: none; color: var(--text-faint); font-size: 11px; padding: 0 3px; cursor: pointer; }
+  .subtask-del:hover { color: var(--text); }
+  .subtask-add-row { display: flex; gap: 4px; margin-top: 4px; }
+  .subtask-add-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 3px 6px; font-size: 11px; }
+  .step-thumbs { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .step-thumb { position: relative; width: 44px; height: 44px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .step-thumb img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; display: block; }
+  .step-thumb-del { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.6); color: #fff; border: none; font-size: 10px; width: 15px; height: 15px; line-height: 15px; padding: 0; cursor: pointer; opacity: 0; }
+  .step-thumb:hover .step-thumb-del { opacity: 1; }
+  .project-concept { margin: 18px 0; }
+  .project-concept textarea { width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 12px 14px; font-size: 13px; font-family: var(--sans); resize: vertical; min-height: 60px; box-shadow: 0 1px 2px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.18); }
+  .project-concept label { display: block; font-size: 11px; color: var(--text-faint); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .meeting-section { margin: 18px 0; }
+  .rec-btn-wrap { display: flex; align-items: center; gap: 8px; }
+  .rec-timer-label { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--green); }
+  .rec-btn { width: 50px; height: 50px; border-radius: 50%; background: #d9484a; color: #fff; font-weight: 800; font-size: 11px; font-family: var(--mono); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(217,72,74,0.5); flex-shrink: 0; }
+  .rec-btn:hover { background: #f2585a; }
+  .rec-btn.recording { background: var(--green); box-shadow: 0 2px 8px rgba(76,175,125,0.5); animation: recPulse 1.4s infinite; }
+  .rec-btn.recording:hover { background: #5cc98f; }
+  @keyframes recPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(76,175,125,0.55); } 50% { box-shadow: 0 0 0 9px rgba(76,175,125,0); } }
+  .rec-waveform { display: flex; align-items: center; gap: 2px; height: 16px; }
+  .rec-waveform span { width: 3px; background: #fff; border-radius: 2px; height: 4px; animation: waveBounce 0.9s infinite ease-in-out; }
+  .rec-waveform span:nth-child(1) { animation-delay: 0s; }
+  .rec-waveform span:nth-child(2) { animation-delay: 0.15s; }
+  .rec-waveform span:nth-child(3) { animation-delay: 0.3s; }
+  .rec-waveform span:nth-child(4) { animation-delay: 0.45s; }
+  @keyframes waveBounce { 0%,100% { height: 3px; } 50% { height: 15px; } }
+  .detail-tabs { display: flex; gap: 6px; margin: 18px 0 4px; border-bottom: 1px solid var(--border); }
+  .detail-tab-btn { background: transparent; border: none; color: var(--text-faint); font-size: 13px; font-weight: 600; padding: 8px 4px; margin-right: 14px; border-bottom: 2px solid transparent; border-radius: 0; cursor: pointer; }
+  .detail-tab-btn:hover { color: var(--text-dim); background: transparent; }
+  .detail-tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+  .detail-tab-content.hidden { display: none; }
+  .meeting-list { display: flex; flex-direction: column; gap: 8px; }
+  .meeting-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; flex-wrap: wrap; }
+  .meeting-card:hover { border-color: #3a3f4a; }
+  .meeting-card-date { font-family: var(--mono); font-size: 11px; color: var(--text-faint); min-width: 80px; }
+  .meeting-card-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 120px; }
+  .meeting-card-title { font-size: 13px; font-weight: 600; }
+  .meeting-card-status { font-size: 11px; color: var(--text-faint); }
+  .meeting-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .meeting-card-chevron { color: var(--text-faint); font-size: 12px; margin: 0 2px; }
+  .meeting-card:hover .meeting-card-chevron { color: var(--accent); }
+  .meeting-modal-subhead { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); margin: 16px 0 6px; }
+  .meeting-summary-text { font-size: 13px; line-height: 1.6; color: var(--text-dim); }
+  .meeting-actionpoints { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--text-dim); }
+  .meeting-tasks-subhead { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); padding: 10px 12px 2px; }
+  .algemeen-subblock { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .meeting-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .meeting-list { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .meeting-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .meeting-row:last-child { border-bottom: none; }
+  .meeting-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .meeting-row-title { font-size: 13px; font-weight: 600; }
+  .meeting-row-status { font-size: 11px; color: var(--text-faint); }
+  .meeting-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .record-panel { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 0; }
+  .record-timer { font-family: var(--mono); font-size: 32px; font-weight: 700; color: var(--text); }
+  .task-review-list { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+  .task-review-row { display: flex; align-items: center; gap: 8px; }
+  .task-review-text { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 7px 10px; font-size: 12px; }
+  .task-review-row select { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text-dim); padding: 6px 8px; font-size: 11px; max-width: 130px; }
+  .step-check.blocked { cursor: not-allowed; opacity: 0.5; }
+  .prio-flag { border: none; background: transparent; font-size: 15px; line-height: 1; padding: 2px 4px; cursor: pointer; color: var(--text-faint); opacity: 0.6; }
+  .prio-flag:hover { opacity: 1; }
+  .prio-flag.prio-none { color: var(--text-faint); }
+  .prio-flag.prio-rood { color: var(--red); opacity: 1; }
+  .prio-flag.prio-oranje { color: var(--orange); opacity: 1; }
+  .prio-flag.prio-groen { color: var(--green); opacity: 1; }
+
+  .benchmark-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .benchmark-section h3 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .bm-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; flex-wrap: wrap; }
+  .bm-row:last-child { border-bottom: none; }
+  .bm-light { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .bm-light.rood { background: var(--red); } .bm-light.oranje { background: var(--orange); } .bm-light.groen { background: var(--green); } .bm-light.pending { background: var(--text-faint); }
+  .bm-week { font-family: var(--mono); color: var(--text-dim); width: 60px; flex-shrink: 0; }
+  .bm-followup { color: var(--text-dim); font-size: 12px; }
+  .bm-input { display: flex; gap: 6px; margin-left: auto; }
+  .bm-input input { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 5px 8px; font-size: 12px; font-family: var(--mono); }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; width: 400px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+  .modal h2 { margin: 0 0 18px; font-size: 16px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 5px; }
+  .field input[type="text"] { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 8px 10px; font-size: 13px; font-family: var(--sans); }
+  .field-row { display: flex; gap: 10px; align-items: flex-end; }
+  .field-row .field { flex: 1; margin-bottom: 0; }
+  input[type="color"] { width: 44px; height: 36px; padding: 2px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; }
+  .color-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 7px; }
+  .color-swatch { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+  .color-swatch.selected { border-color: var(--text); box-shadow: 0 0 0 2px var(--panel); }
+  .type-toggle { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+  .type-toggle button { flex: 1; border: none; background: transparent; padding: 7px; font-size: 12px; border-radius: 6px; }
+  .type-toggle button.active { background: var(--accent); color: #0c1220; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .hint { font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+  .stats-add-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .stats-add-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 7px 9px; font-size: 12px; }
+  .stats-add-row input[type="number"] { width: 150px; }
+  .stats-list { margin-top: 14px; display: flex; flex-direction: column; gap: 2px; }
+  .stats-list-row { display: flex; align-items: center; gap: 14px; padding: 6px 4px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .stats-list-row:last-child { border-bottom: none; }
+  .stats-list-week { font-family: var(--mono); color: var(--text-dim); width: 70px; flex-shrink: 0; }
+  .stats-list-val { color: var(--text-dim); flex: 1; }
+  .stats-list-btn { border: none; background: none; color: var(--text-faint); font-size: 12px; padding: 2px 5px; cursor: pointer; }
+  .stats-list-btn:hover { color: var(--text); }
+  .stats-month-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .stats-month-title { font-size: 13px; font-weight: 700; color: var(--text); }
+  .stats-month-summary { display: flex; gap: 18px; margin: 10px 0 4px; font-size: 12px; color: var(--text-dim); }
+  .stats-month-summary b { color: var(--text); font-family: var(--mono); }
+  .chart-legend { display: flex; gap: 16px; margin-top: 6px; font-size: 11px; color: var(--text-dim); }
+  .chart-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .chart-tooltip { position: absolute; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 11px; line-height: 1.5; pointer-events: none; }
+  .stats-chart-svg { width: 100%; aspect-ratio: 640 / 220; height: auto; }
+  .benchmark-section { position: relative; }
+  .top-nav { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .top-nav-btn { background: transparent; border: none; color: var(--text-dim); font-size: 13px; font-weight: 600; padding: 6px 4px; cursor: pointer; border-bottom: 2px solid transparent; border-radius: 0; }
+  .top-nav-btn:hover { color: var(--text); background: transparent; }
+  .top-nav-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+  .platform-buttons { display: flex; gap: 8px; margin: 14px 0 24px; }
+  .platform-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: none; cursor: pointer; color: #fff; opacity: 0.92; }
+  .platform-btn:hover { opacity: 1; filter: brightness(1.08); }
+  .platform-btn.spotify { background: #1DB954; }
+  .platform-btn.apple { background: #A64CD6; }
+  .platform-btn.youtube { background: #FF0000; }
+  .live-shows-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 800px) { .live-shows-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .live-shows-grid { grid-template-columns: 1fr; } }
+  .live-show-tile { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.18); }
+  .live-show-tile:hover { border-color: #3a3f4a; }
+  .live-show-tile:hover .live-show-name { color: var(--accent); }
+  .live-show-logo-lg { width: 64px; height: 64px; border-radius: 10px; background: var(--bg); overflow: hidden; }
+  .live-show-logo-lg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .live-show-total { font-size: 11px; color: var(--text-faint); font-family: var(--mono); white-space: nowrap; }
+  .year-toggle-row { display: flex; gap: 16px; margin: 14px 0; }
+  .metric-toggle-row { display: flex; gap: 16px; margin: 0 0 14px; }
+  .year-checkbox { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
+  .compare-toggles { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 14px; }
+  .live-show-name { font-size: 14px; font-weight: 600; }
+  .live-show-delete { position: absolute; top: 6px; right: 6px; border: none; background: transparent; color: var(--text-faint); font-size: 15px; padding: 2px 6px; cursor: pointer; opacity: 0; }
+  .live-show-tile:hover .live-show-delete { opacity: 1; }
+  .live-show-delete:hover { color: var(--red); }
+  .add-show-row { display: flex; gap: 8px; padding: 14px 18px; }
+  .add-show-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 8px 10px; font-size: 13px; }
+  .home-grid { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .home-grid { grid-template-columns: 1fr; } }
+  .home-right-col { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 16px; }
+  .home-sidebar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .home-sidebar h3 { margin: 0; padding: 14px 16px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+  .sidebar-todo { display: flex; align-items: flex-start; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; }
+  .sidebar-todo:last-child { border-bottom: none; }
+  .sidebar-todo:hover { background: var(--panel-hover); }
+  .sidebar-prio { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+  .sidebar-prio.rood { background: var(--red); } .sidebar-prio.oranje { background: var(--orange); } .sidebar-prio.groen { background: var(--green); } .sidebar-prio.none { background: var(--text-faint); }
+  .sidebar-todo-text { flex: 1; min-width: 0; }
+  .sidebar-todo-proj { color: var(--text-dim); font-size: 10px; margin-top: 2px; }
+  .date-input-row { display: flex; gap: 6px; }
+  .date-input-row input[type="text"] { flex: 1; }
+  .date-pick-btn { flex-shrink: 0; padding: 8px 10px; font-size: 14px; }
+  .native-date-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+  .hidden { display: none !important; }
+  .build-tag { position: fixed; bottom: 6px; right: 10px; font-family: var(--mono); font-size: 9px; color: var(--text-faint); opacity: 0.35; pointer-events: none; z-index: 1; }
+  /* ---- Premium polish pass ---- */
+  body { background: radial-gradient(ellipse at top, #191c22 0%, var(--bg) 55%); }
+  .timeline, .track-col, .benchmark-section, .cal-grid, .modal, .proj-list, .home-sidebar, .year-month-card {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25), 0 4px 16px rgba(0,0,0,0.18);
+  }
+  button.primary { background: linear-gradient(180deg, #6b98f2 0%, var(--accent) 100%); box-shadow: 0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(91,141,239,0.15); }
+  button.primary:hover { filter: brightness(1.06); box-shadow: 0 2px 6px rgba(91,141,239,0.35); }
+  button { transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s; }
+  .proj-row, .sidebar-todo, .cal-day-inner, .tl-row-label { transition: background 0.15s; }
+  .modal { box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3); }
+  header h1 { text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+  .step, .cal-daynum-cell, .track-head, .bm-row { transition: background 0.12s; }
+  .track-col:hover, .timeline:hover { box-shadow: 0 1px 2px rgba(0,0,0,0.25), 0 6px 20px rgba(0,0,0,0.22); }
+
+  /* ---- Touch/tap fixes (removes the "tap twice" issue on mobile) ---- */
+  button, .cal-band, .cal-chip, .proj-row, .sidebar-todo, .live-show-tile, .step-check, .subtask-check,
+  .platform-btn, .tl-row-label, .step-note-text, .track-start-edit, .prio-flag, .color-swatch, a {
+    touch-action: manipulation;
+  }
+  * { -webkit-tap-highlight-color: rgba(91,141,239,0.18); }
+
+  /* ---- Tablet (<=900px, already partly covered by home-grid) ---- */
+  @media (max-width: 900px) {
+    .wrap { padding: 20px 16px 60px; }
+    .tracks { gap: 12px; }
+  }
+
+  /* ---- Phone (<=640px) ---- */
+  @media (max-width: 640px) {
+    .wrap { padding: 16px 12px 50px; }
+    header { flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    header h1 { font-size: 16px; }
+    .top-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+    .top-nav-btn { white-space: nowrap; flex-shrink: 0; }
+    .cal-controls, .tl-controls { flex-wrap: wrap; gap: 10px; }
+    .cal-grid { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .cal-weekdays, .cal-daynum-grid, .cal-band-grid, .cal-single-grid { min-width: 480px; }
+    .proj-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      grid-template-columns: unset;
+    }
+    .proj-row .dot { order: 1; }
+    .proj-row .p-name { order: 2; flex: 1 1 auto; min-width: 60px; }
+    .proj-row .proj-row-delete { order: 3; flex-shrink: 0; }
+    .proj-row .p-period { order: 4; flex-basis: 100%; font-size: 11px; white-space: normal; }
+    .proj-row .p-status { order: 5; font-size: 10px; }
+    .proj-row .p-countdown { order: 6; font-size: 11px; margin-left: auto; }
+    .detail-header { flex-direction: column; align-items: stretch; }
+    .detail-header-right { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+    .tracks { grid-template-columns: 1fr !important; }
+    .field-row { flex-direction: column; align-items: stretch; }
+    .field-row .field { width: 100%; }
+    .modal { width: 100%; max-width: 94vw; padding: 18px; }
+    .stats-list-row { flex-wrap: wrap; gap: 6px 12px; }
+    .stats-add-row { flex-direction: column; }
+    .stats-add-row input { width: 100% !important; }
+    .platform-buttons { flex-wrap: wrap; }
+    .live-shows-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .year-grid { grid-template-columns: 1fr 1fr; }
+    .compare-toggles { gap: 8px 12px; }
+    .home-right-col { position: static; }
+    .add-step-row, .add-show-row { flex-wrap: wrap; }
+    .step-actions { opacity: 1; } /* no hover on touch devices, so keep actions visible */
+    .live-show-delete { opacity: 1; }
+  }
+  @media (max-width: 420px) {
+    .live-shows-grid { grid-template-columns: 1fr; }
+    .year-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="homeLink">RMN <span>projecttool</span></h1>
+    <div class="header-actions">
+      <button class="ghost small auth-btn" id="authBtn">\u{1F512}</button>
+      <button class="primary" id="newProjectBtn">+ Nieuw project</button>
+    </div>
+  </header>
+  <nav class="top-nav">
+    <button class="top-nav-btn" id="navHome">Projecten</button>
+    <button class="top-nav-btn" id="navLiveShows">Lopende podcasts</button>
+  </nav>
+  <div id="homeView">
+    <div class="home-grid">
+      <div class="home-main"><div id="homeCalWrap"></div><div id="homeListWrap"></div></div>
+      <div class="home-right-col">
+        <div class="home-sidebar" id="homeSidebar"></div>
+        <div id="personalTodosWrap"></div>
+      </div>
+    </div>
+  </div>
+  <div id="liveShowsView" class="hidden"></div>
+  <div id="detailView" class="hidden"></div>
+  <div id="showDetailView" class="hidden"></div>
+</div>
+<div class="build-tag">build 2026-07-06 12:20</div>
+<div id="modalRoot"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+// ================= Config (Supabase) =================
+const DEFAULT_URL = 'https://oxzdddxjcqmhwsxiupic.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_SpubcyCBwiZaZyjoA-LiCw_276Kf1rJ';
+const OWNER_EMAIL = 'd.vanmosselveld@gmail.com';
+
+// ================= Passkey auth (Face ID / Touch ID) =================
+const authClient = window.supabase.createClient(DEFAULT_URL, DEFAULT_KEY, { auth: { experimental: { passkey: true } } });
+let isOwner = false;
+
+async function initAuthState() {
+  try {
+    const isRecovery = window.location.hash.includes('type=recovery');
+    const { data } = await authClient.auth.getSession();
+    isOwner = !!data.session;
+    updateAuthUI();
+    if (isRecovery && isOwner) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      offerPasskeyRegistration();
+    }
+  } catch (e) { isOwner = false; updateAuthUI(); }
+}
+function offerPasskeyRegistration() {
+  renderModal(`
+    <h2>Welkom terug</h2>
+    <div class="hint">Je bent ingelogd via de e-maillink. Registreer nu Face ID/Touch ID zodat je vanaf hier altijd zonder wachtwoord kan ontgrendelen.</div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Later</button><button class="primary" id="modalRegisterPasskey">Face ID/Touch ID registreren</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalRegisterPasskey').onclick = async () => {
+    const btn = document.getElementById('modalRegisterPasskey');
+    btn.disabled = true; btn.textContent = 'Bezig...';
+    try {
+      const { error } = await authClient.auth.registerPasskey();
+      if (error) throw error;
+      closeModal();
+      alert('Gelukt! Vanaf nu ontgrendel je met Face ID/Touch ID via het slotje rechtsboven.');
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Face ID/Touch ID registreren';
+      alert('Mislukt: ' + err.message);
+    }
+  };
+}
+function updateAuthUI() {
+  const btn = document.getElementById('authBtn');
+  if (!btn) return;
+  btn.textContent = isOwner ? '\u{1F513}' : '\u{1F512}';
+  btn.title = '';
+}
+function requireOwner() {
+  if (!isOwner) {
+    alert('Deze pagina staat op alleen-lezen. Bewerken is hier niet mogelijk.');
+    return false;
+  }
+  return true;
+}
+async function handleAuthClick() {
+  if (isOwner) {
+    if (!confirm('Uitloggen op dit apparaat?')) return;
+    await authClient.auth.signOut();
+    isOwner = false; updateAuthUI();
+    return;
+  }
+  try {
+    const { data, error } = await authClient.auth.signInWithPasskey();
+    if (error) throw error;
+    isOwner = true; updateAuthUI();
+  } catch (err) {
+    showPasskeySetupModal();
+  }
+}
+function showPasskeySetupModal() {
+  renderModal(`
+    <h2>Face ID / Touch ID instellen</h2>
+    <div class="hint">Nog geen Face ID/Touch ID geregistreerd op dit apparaat voor dit account. Log eenmalig in met het wachtwoord dat je apart hebt gekregen, en registreer daarna je Face ID/Touch ID. Daarna heb je dit wachtwoord nooit meer nodig.</div>
+    <div class="field"><label>E-mail</label><input type="text" id="setupEmail" value="${OWNER_EMAIL}" readonly></div>
+    <div class="field"><label>Eenmalig wachtwoord</label><input type="password" id="setupPassword" placeholder="wachtwoord"></div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSetup">Face ID/Touch ID registreren</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalSetup').onclick = async () => {
+    const btn = document.getElementById('modalSetup');
+    btn.disabled = true; btn.textContent = 'Bezig...';
+    try {
+      const password = document.getElementById('setupPassword').value;
+      const { error: signInErr } = await authClient.auth.signInWithPassword({ email: OWNER_EMAIL, password });
+      if (signInErr) throw signInErr;
+      const { error: regErr } = await authClient.auth.registerPasskey();
+      if (regErr) throw regErr;
+      isOwner = true; updateAuthUI(); closeModal();
+      alert('Gelukt! Vanaf nu ontgrendel je met Face ID/Touch ID via het slotje rechtsboven — dit wachtwoord heb je niet meer nodig.');
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Face ID/Touch ID registreren';
+      alert('Mislukt: ' + err.message);
+    }
+  };
+}
+
+const COLOR_PALETTE = ['#ce6363','#ce7963','#ce8e63','#cea363','#ceb863','#cece63','#b8ce63','#a3ce63','#8ece63','#79ce63','#63ce63','#63ce79','#63ce8e','#63cea3','#63ceb8','#63cece','#63b8ce','#63a3ce','#638ece','#6379ce','#6363ce','#7963ce','#8e63ce','#a363ce','#b863ce','#ce63ce','#ce63b8','#ce63a3','#ce638e','#ce6379'];
+function colorPickerHtml(id, selected) {
+  return `<div class="color-grid" id="${id}_grid">${COLOR_PALETTE.map(c => `<div class="color-swatch ${c===selected?'selected':''}" style="background:${c}" onclick="selectColor('${id}','${c}')" data-color="${c}"></div>`).join('')}</div><input type="hidden" id="${id}" value="${selected}">`;
+}
+function selectColor(id, color) {
+  document.getElementById(id).value = color;
+  document.querySelectorAll('#' + id + '_grid .color-swatch').forEach(el => el.classList.toggle('selected', el.dataset.color === color));
+}
+const TRACK_COLORS = { productie: '#7fd99a', marketing: '#e8b169', distributie: '#7fb8e8', taken: '#b89ae0', algemeen: '#c17fe0' };
+const TRACK_LABELS = { productie: 'Productie', marketing: 'Marketing', distributie: 'Distributie', taken: 'Taken', algemeen: 'Algemeen' };
+
+function getConfig() {
+  return { url: localStorage.getItem('pt_sb_url') || DEFAULT_URL, key: localStorage.getItem('pt_sb_key') || DEFAULT_KEY };
+}
+function setConfig(url, key) { localStorage.setItem('pt_sb_url', url); localStorage.setItem('pt_sb_key', key); }
+
+async function getAuthToken() {
+  const { key } = getConfig();
+  try {
+    const { data } = await authClient.auth.getSession();
+    if (data.session) return data.session.access_token;
+  } catch (e) { /* not signed in */ }
+  return key;
+}
+async function sb(method, path, body, prefer) {
+  const { url, key } = getConfig();
+  const authToken = await getAuthToken();
+  const headers = { apikey: key, Authorization: 'Bearer ' + authToken };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (prefer) headers['Prefer'] = prefer;
+  const res = await fetch(url + '/rest/v1/' + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  if (!res.ok) { const t = await res.text(); throw new Error('Supabase-fout (' + res.status + '): ' + t.slice(0,200)); }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+const sbSelect = (table, query) => sb('GET', table + (query ? '?' + query : ''));
+const sbInsert = (table, rows) => sb('POST', table, rows, 'return=representation');
+const sbUpdate = (table, filter, patch) => sb('PATCH', table + '?' + filter, patch, 'return=representation');
+const sbDelete = (table, filter) => sb('DELETE', table + '?' + filter);
+
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function sortForDisplay(list) { return list.slice().sort((a,b) => (a.status==='done')-(b.status==='done') || a.order_num-b.order_num); }
+function statusLabel(s) { if (s === 'in_productie') return 'In productie'; if (s === 'live') return 'Live'; return s; }
+function uid(prefix) { return prefix + '_' + Date.now() + '_' + Math.floor(Math.random()*10000); }
+
+function parseDutchDate(str) {
+  if (!str) return null;
+  const m = str.trim().match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d;
+}
+function toIso(d) { return d ? d.toISOString() : null; }
+function isoToDutch(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + d.getFullYear();
+}
+function todayDutch() { return isoToDutch(new Date().toISOString()); }
+function dutchToNative(dutch) {
+  const d = parseDutchDate(dutch);
+  if (!d) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function dateFieldHtml(id, label, valueDutch) {
+  return `<div class="field"><label>${label}</label><div class="date-input-row">
+    <input type="text" id="${id}" value="${valueDutch}" placeholder="DD-MM-JJJJ">
+    <input type="date" id="${id}_native" class="native-date-hidden" value="${dutchToNative(valueDutch)}" onchange="syncDutchFromNative('${id}')">
+    <button type="button" class="date-pick-btn" onclick="openDatePicker('${id}')">\u{1F4C5}</button>
+  </div></div>`;
+}
+function openDatePicker(id) {
+  const el = document.getElementById(id + '_native');
+  if (el.showPicker) el.showPicker(); else el.click();
+}
+function syncDutchFromNative(id) {
+  const native = document.getElementById(id + '_native').value;
+  if (!native) return;
+  const [y,m,d] = native.split('-');
+  document.getElementById(id).value = d + '-' + m + '-' + y;
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+}
+function daysUntil(iso) {
+  if (!iso) return null;
+  const target = new Date(iso); target.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((target - today) / 86400000);
+}
+function countdownLabel(iso) {
+  const n = daysUntil(iso);
+  if (n === null) return {text: 'geen datum', cls: ''};
+  if (n < 0) return {text: Math.abs(n) + ' dagen geleden', cls: 'overdue'};
+  if (n === 0) return {text: 'vandaag!', cls: 'soon'};
+  if (n <= 14) return {text: 'nog ' + n + ' dagen', cls: 'soon'};
+  return {text: 'nog ' + n + ' dagen', cls: ''};
+}
+
+// ================= Modal helpers =================
+function renderModal(innerHtml) {
+  document.getElementById('modalRoot').innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal">${innerHtml}</div></div>`;
+  document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
+}
+function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+
+function showSettingsModal() {
+  const cfg = getConfig();
+  renderModal(`
+    <h2>Instellingen</h2>
+    <div class="field"><label>Supabase URL</label><input type="text" id="cfgUrl" value="${cfg.url}"></div>
+    <div class="field"><label>Supabase publishable key</label><input type="text" id="cfgKey" value="${cfg.key}"></div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalSave').onclick = () => {
+    setConfig(document.getElementById('cfgUrl').value.trim(), document.getElementById('cfgKey').value.trim());
+    closeModal(); loadHome();
+  };
+}
+
+function showNewProjectModal() {
+  if (!requireOwner()) return;
+  const randomColor = COLOR_PALETTE[Math.floor(Math.random() * COLOR_PALETTE.length)];
+  let type = 'podcast';
+  renderModal(`
+    <h2>Nieuw project</h2>
+    <div class="field"><label>Type project</label>
+      <div class="type-toggle" id="npTypeToggle">
+        <button type="button" data-type="podcast" class="active">Podcast</button>
+        <button type="button" data-type="overig">Overig</button>
+      </div>
+    </div>
+    <div class="field"><label>Naam</label><input type="text" id="npName" placeholder="bijv. EW Politiek Vandaag"></div>
+    <div class="field"><label>Ritme (optioneel)</label><input type="text" id="npFrequency" placeholder="bijv. wekelijks"></div>
+    <div class="field"><label>Kleur</label>${colorPickerHtml('npColor', randomColor)}</div>
+    <div class="field-row">
+      ${dateFieldHtml('npStart','Startdatum', todayDutch())}
+      <div class="field" id="npLaunchWrap"><label id="npLaunchLabel">Beoogde launchdatum</label><div class="date-input-row"><input type="text" id="npLaunch" placeholder="DD-MM-JJJJ"><input type="date" id="npLaunch_native" class="native-date-hidden" onchange="syncDutchFromNative('npLaunch')"><button type="button" class="date-pick-btn" onclick="openDatePicker('npLaunch')">\u{1F4C5}</button></div></div>
+    </div>
+    <div class="hint">Datumnotatie: DD-MM-JJJJ (bijv. 03-07-2026)</div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalCreate">Aanmaken</button></div>
+  `);
+  document.getElementById('npTypeToggle').querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => {
+      type = btn.dataset.type;
+      document.getElementById('npTypeToggle').querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+      document.getElementById('npLaunchLabel').textContent = type === 'overig' ? 'Deadline (optioneel)' : 'Beoogde launchdatum';
+    };
+  });
+  document.getElementById('modalCancel').onclick = closeModal;
+  let submitting = false;
+  document.getElementById('modalCreate').onclick = async () => {
+    if (submitting) return;
+    const name = document.getElementById('npName').value.trim();
+    const frequency = document.getElementById('npFrequency').value.trim();
+    const color = document.getElementById('npColor').value;
+    const startD = parseDutchDate(document.getElementById('npStart').value.trim());
+    const launchStr = document.getElementById('npLaunch').value.trim();
+    if (!name) { alert('Vul een naam in.'); return; }
+    if (!startD) { alert('Startdatum klopt niet. Gebruik DD-MM-JJJJ.'); return; }
+    let launchD = null;
+    if (launchStr) { launchD = parseDutchDate(launchStr); if (!launchD) { alert('Launchdatum klopt niet. Gebruik DD-MM-JJJJ.'); return; } }
+    else if (type === 'podcast') { alert('Vul een beoogde launchdatum in.'); return; }
+    submitting = true;
+    const btn = document.getElementById('modalCreate');
+    btn.disabled = true; btn.textContent = 'Bezig...';
+    try {
+      await createProject(name, frequency, color, startD, launchD, type);
+      closeModal(); loadHome();
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Aanmaken'; submitting = false;
+      alert('Aanmaken mislukt: ' + err.message);
+    }
+  };
+}
+
+function showEditProjectModal(project) {
+  if (!requireOwner()) return;
+  renderModal(`
+    <h2>Project bewerken</h2>
+    <div class="field"><label>Naam</label><input type="text" id="epName" value="${escapeHtml(project.name)}"></div>
+    <div class="field"><label>Ritme (optioneel)</label><input type="text" id="epFrequency" value="${escapeHtml(project.frequency || '')}"></div>
+    <div class="field"><label>Kleur</label>${colorPickerHtml('epColor', project.color || '#5b8def')}</div>
+    <div class="field-row">
+      ${dateFieldHtml('epStart','Startdatum', isoToDutch(project.start_date))}
+      ${dateFieldHtml('epLaunch', project.type === 'overig' ? 'Deadline' : 'Launchdatum', isoToDutch(project.launch_date))}
+    </div>
+    ${project.type === 'podcast' ? `
+    <div class="field"><label>Type (voor benchmark-normen)</label>
+      <div class="type-toggle" id="epAudioToggle">
+        <button type="button" data-val="audio" class="${(project.audio_type||'audio')==='audio'?'active':''}">Alleen audio</button>
+        <button type="button" data-val="audio_video" class="${project.audio_type==='audio_video'?'active':''}">Audio & video</button>
+      </div>
+    </div>
+    <div class="field"><label>Springcast-ID (optioneel, voor koppeling luistercijfers)</label><input type="text" id="epSpringcastId" value="${escapeHtml(project.springcast_id || '')}" placeholder="bijv. 19291"></div>` : ''}
+    ${project.type === 'podcast' ? `
+    <div class="field-row">
+      ${dateFieldHtml('epMarketingStart','Start marketing (optioneel)', isoToDutch(project.marketing_start_date))}
+      ${dateFieldHtml('epDistributieStart','Start distributie (optioneel)', isoToDutch(project.distributie_start_date))}
+    </div>
+    <div class="hint">Standaard: start meteen zodra ontgrendeld (na "Edit &amp; afronding" in productie). Vul dit in om zelf een datum te bepalen.</div>
+    ` : ''}
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  let selectedAudioType = project.audio_type || 'audio';
+  const audioToggle = document.getElementById('epAudioToggle');
+  if (audioToggle) {
+    audioToggle.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => {
+        selectedAudioType = btn.dataset.val;
+        audioToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+      };
+    });
+  }
+  let submitting = false;
+  document.getElementById('modalSave').onclick = async () => {
+    if (submitting) return;
+    const startD = parseDutchDate(document.getElementById('epStart').value.trim());
+    const launchStr = document.getElementById('epLaunch').value.trim();
+    const launchD = launchStr ? parseDutchDate(launchStr) : null;
+    if (!startD) { alert('Startdatum klopt niet.'); return; }
+    if (launchStr && !launchD) { alert('Launchdatum klopt niet.'); return; }
+    const patch = { name: document.getElementById('epName').value.trim(), frequency: document.getElementById('epFrequency').value.trim(), color: document.getElementById('epColor').value, start_date: toIso(startD), launch_date: launchD ? toIso(launchD) : null };
+    if (project.type === 'podcast') {
+      patch.audio_type = selectedAudioType;
+      patch.springcast_id = document.getElementById('epSpringcastId').value.trim() || null;
+      const mkStr = document.getElementById('epMarketingStart').value.trim();
+      const dsStr = document.getElementById('epDistributieStart').value.trim();
+      if (mkStr) { const d = parseDutchDate(mkStr); if (!d) { alert('Marketing-startdatum klopt niet.'); return; } patch.marketing_start_date = toIso(d); }
+      else patch.marketing_start_date = null;
+      if (dsStr) { const d = parseDutchDate(dsStr); if (!d) { alert('Distributie-startdatum klopt niet.'); return; } patch.distributie_start_date = toIso(d); }
+      else patch.distributie_start_date = null;
+    }
+    submitting = true;
+    const btn = document.getElementById('modalSave');
+    btn.disabled = true; btn.textContent = 'Bezig...';
+    try {
+      await sbUpdate('projects', 'id=eq.' + project.id, patch);
+      closeModal(); openProject(project.id);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Opslaan'; submitting = false;
+      alert('Opslaan mislukt: ' + err.message);
+    }
+  };
+}
+
+function promptTrackStartDate(projectId, track, currentIso) {
+  const field = track === 'marketing' ? 'marketing_start_date' : 'distributie_start_date';
+  renderModal(`
+    <h2>Startdatum ${TRACK_LABELS[track]}</h2>
+    ${dateFieldHtml('tsdInput', 'Startdatum (leeg = start meteen zodra ontgrendeld)', isoToDutch(currentIso))}
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalSave').onclick = async () => {
+    const val = document.getElementById('tsdInput').value.trim();
+    let patch = { [field]: null };
+    if (val) {
+      const d = parseDutchDate(val);
+      if (!d) { alert('Datum klopt niet. Gebruik DD-MM-JJJJ.'); return; }
+      patch = { [field]: toIso(d) };
+    }
+    await sbUpdate('projects', 'id=eq.' + projectId, patch);
+    closeModal(); openProject(projectId);
+  };
+}
+
+// ================= Template =================
+function templateRows() {
+  const productie = ["Concepting","Script/opzet pilot","Opname eerste 2 afleveringen","Edit & afronding eerste 2 afleveringen","Logo design","Feedback redactie","Lancering"];
+  const marketing = ["Huidige podcastcijfers verzamelen (nulmeting)","Doelgroep bepalen","Groeidoelstelling vaststellen (KPI's per platform)","Funnelstructuur uitwerken (awareness & retargeting)","Contentplan opstellen (snippets, quotes, promo)","Promo content opnemen","Snippets & social content produceren","Funnel opzetten in Ads Manager","Advertentie-assets voorbereiden","Tracking & UTM's instellen","Campagne live zetten","Evaluatie na 1 week","Evaluatie na 1 maand"];
+  const distributie = ["Check: RSS-feed aangemaakt in Springcast","Check: gekoppeld aan Spotify","Check: gekoppeld aan Apple Podcasts","Check: geupload op YouTube","Check: gepubliceerd via Blue Billywig","Check: toegevoegd aan Mijn Magazines app","Check: podcastpagina live op website","Check: SEO-titel & meta description geschreven","Check: shownotes geschreven","Check: transcript/artikel gemaakt","Check: trailer geproduceerd","Check: social quote-video's klaar","Check: teaser video klaar","Check: poster/canvas/banners klaar","Check: homepage-promotie geregeld","Check: social kanalen gepland (IG/FB/LI/TikTok/YouTube)","Check: nieuwsbrief-vermelding geregeld","Check: print-vermelding gepland","Check: Meta-campagne + pre-rolls live","Check: PR-plan/pitches lopen","Check: launch-planning + tracking (UTM) compleet","Check: evaluatie 1 week na launch","Check: evaluatie 1 maand na launch"];
+  const rows = [];
+  productie.forEach((n,i) => rows.push({track:'productie', order_num:i+1, step_name:n, is_check:false}));
+  marketing.forEach((n,i) => rows.push({track:'marketing', order_num:i+1, step_name:n, is_check:false}));
+  distributie.forEach((n,i) => rows.push({track:'distributie', order_num:i+1, step_name:n, is_check:true}));
+  return rows;
+}
+
+// ================= Business logic =================
+async function createProject(name, frequency, color, startD, launchD, type) {
+  if (!requireOwner()) return;
+  const id = uid('proj');
+  await sbInsert('projects', [{ id, name, status: 'in_productie', type, frequency: frequency||'', color, start_date: toIso(startD), launch_date: toIso(launchD) }]);
+  if (type === 'podcast') {
+    const tpl = templateRows();
+    const rows = tpl.map(t => ({
+      id: id + '_' + t.track + '_' + t.order_num, project_id: id, track: t.track, order_num: t.order_num,
+      step_name: t.step_name, is_check: t.is_check, status: 'pending', subtasks: []
+    }));
+    await sbInsert('project_steps', rows);
+  }
+  return id;
+}
+
+async function markStepDone(projectId, track, orderNum) {
+  const stepId = projectId + '_' + track + '_' + orderNum;
+  await sbUpdate('project_steps', 'id=eq.' + stepId, { status: 'done', completed_date: new Date().toISOString(), reminder_pending: false });
+
+  if (track === 'productie' && orderNum === 4) {
+    const proj = (await sbSelect('projects', 'id=eq.' + projectId + '&select=*'))[0];
+    const now = new Date().toISOString();
+    const patch = { marketing_unlocked: true, distributie_unlocked: true };
+    if (!proj.marketing_start_date) patch.marketing_start_date = now;
+    if (!proj.distributie_start_date) patch.distributie_start_date = now;
+    await sbUpdate('projects', 'id=eq.' + projectId, patch);
+  }
+}
+
+async function toggleLiveStatus(projectId, currentStatus) {
+  if (!requireOwner()) return;
+  const goingLive = currentStatus !== 'live';
+  await sbUpdate('projects', 'id=eq.' + projectId, { status: goingLive ? 'live' : 'in_productie' });
+  if (goingLive) {
+    const existingBm = await sbSelect('benchmark_checks', 'project_id=eq.' + projectId + '&select=id&limit=1');
+    if (!existingBm.length) {
+      const dueDate = new Date(Date.now() + 28*86400000).toISOString();
+      await sbInsert('benchmark_checks', [{ id: uid('bm'), project_id: projectId, week_number: 4, due_date: dueDate, status: 'pending', reminder_pending: true }]);
+    }
+  }
+  openProject(projectId);
+}
+
+async function addToLiveShows(projectId) {
+  if (!requireOwner()) return;
+  const proj = (await sbSelect('projects', 'id=eq.' + projectId + '&select=name,spotify_url,apple_url,youtube_url'))[0];
+  if (!proj) return;
+  const existing = await sbSelect('live_shows', 'name=eq.' + encodeURIComponent(proj.name) + '&select=id');
+  if (existing.length) { alert('"' + proj.name + '" staat al bij Lopende podcasts.'); return; }
+  await sbInsert('live_shows', [{ id: uid('show'), name: proj.name, spotify_url: proj.spotify_url, apple_url: proj.apple_url, youtube_url: proj.youtube_url }]);
+  alert('"' + proj.name + '" is toegevoegd aan Lopende podcasts.');
+}
+
+async function addStep(projectId, track, stepName, fromMeeting) {
+  if (!requireOwner()) return;
+  const steps = await sbSelect('project_steps', 'project_id=eq.' + projectId + '&track=eq.' + track + '&select=order_num&order=order_num.desc&limit=1');
+  const maxOrder = steps.length ? steps[0].order_num : 0;
+  const newOrder = maxOrder + 1;
+  const rows = await sbInsert('project_steps', [{ id: projectId + '_' + track + '_' + newOrder, project_id: projectId, track, order_num: newOrder, step_name: stepName, status: 'pending', subtasks: [], from_meeting: !!fromMeeting }]);
+  return rows[0];
+}
+
+async function deleteStep(stepId) {
+  if (!requireOwner()) return;
+  const step = (await sbSelect('project_steps', 'id=eq.' + stepId + '&select=*'))[0];
+  if (!step) return;
+  await sbDelete('project_steps', 'id=eq.' + stepId);
+  await renumberTrack(step.project_id, step.track);
+}
+
+async function renumberTrack(projectId, track) {
+  const rows = await sbSelect('project_steps', 'project_id=eq.' + projectId + '&track=eq.' + track + '&select=*&order=order_num.asc');
+  for (let i = 0; i < rows.length; i++) {
+    const newOrder = i + 1;
+    const newId = projectId + '_' + track + '_' + newOrder;
+    if (rows[i].order_num !== newOrder || rows[i].id !== newId) {
+      await sbUpdate('project_steps', 'id=eq.' + rows[i].id, { order_num: newOrder, id: newId });
+    }
+  }
+}
+async function reorderSteps(projectId, track, orderedIds) {
+  // two-phase rename to avoid id collisions
+  for (let i = 0; i < orderedIds.length; i++) {
+    await sbUpdate('project_steps', 'id=eq.' + orderedIds[i], { id: 'tmp_' + i + '_' + orderedIds[i] });
+  }
+  for (let i = 0; i < orderedIds.length; i++) {
+    const newOrder = i + 1;
+    await sbUpdate('project_steps', 'id=eq.' + 'tmp_' + i + '_' + orderedIds[i], { order_num: newOrder, id: projectId + '_' + track + '_' + newOrder });
+  }
+}
+
+async function updateBenchmark(checkId, avgListeners) {
+  const check = (await sbSelect('benchmark_checks', 'id=eq.' + checkId + '&select=*'))[0];
+  const stoplight = avgListeners < 1500 ? 'rood' : (avgListeners < 4500 ? 'oranje' : 'groen');
+  const followUp = stoplight === 'rood' ? 'Stopgesprek inplannen' : (stoplight === 'oranje' ? '10 weken extra distributie-actie, her-evalueren' : '');
+  await sbUpdate('benchmark_checks', 'id=eq.' + checkId, { avg_listeners: avgListeners, stoplight, follow_up_task: followUp, status: 'done' });
+  const nextWeek = (check.week_number || 0) + 4;
+  const dueDate = new Date(Date.now() + 28*86400000).toISOString();
+  await sbInsert('benchmark_checks', [{ id: uid('bm'), project_id: check.project_id, week_number: nextWeek, due_date: dueDate, status: 'pending', reminder_pending: true }]);
+}
+
+// ================= Month calendar + list (homepage) =================
+const calState = { anchor: new Date(), mode: 'maand' };
+function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function isSameDay(a, b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+
+function computeWeekBands(week, projects) {
+  const candidates = [];
+  projects.forEach(p => {
+    const start = p.start_date ? new Date(p.start_date) : null;
+    const launch = p.launch_date ? new Date(p.launch_date) : null;
+    if (!start || !launch || isSameDay(start, launch)) return;
+    if (launch < week[0] || start > week[6]) return;
+    const segStart = start < week[0] ? week[0] : start;
+    const segEnd = launch > week[6] ? week[6] : launch;
+    const colStart = week.findIndex(d => isSameDay(d, segStart));
+    const colEnd = week.findIndex(d => isSameDay(d, segEnd));
+    if (colStart === -1 || colEnd === -1) return;
+    let label = p.name;
+    if (isSameDay(segStart, start)) label = '\u25B6 ' + label;
+    if (isSameDay(segEnd, launch)) label = label + ' \u{1F3C1}';
+    candidates.push({ colStart, colEnd, label, color: p.color, id: p.id });
+  });
+  const rows = [];
+  candidates.forEach(c => {
+    const row = rows.find(r => r.every(item => c.colEnd < item.colStart || c.colStart > item.colEnd));
+    if (row) row.push(c); else rows.push([c]);
+  });
+  return rows;
+}
+
+function singleDayItemsForDay(day, projects) {
+  const items = [];
+  projects.forEach(p => {
+    const start = p.start_date ? new Date(p.start_date) : null;
+    const launch = p.launch_date ? new Date(p.launch_date) : null;
+    if (start && launch && isSameDay(start, launch) && isSameDay(day, start)) items.push({label: '\u25B6\u{1F3C1} ' + p.name, color: p.color, id: p.id});
+    else if (start && !launch && isSameDay(start, day)) items.push({label: '\u25B6 ' + p.name, color: p.color, id: p.id});
+    else if (launch && !start && isSameDay(launch, day)) items.push({label: '\u{1F3C1} ' + p.name, color: p.color, id: p.id});
+  });
+  return items;
+}
+
+function renderHomeCalendar(containerId, projects) {
+  if (calState.mode === 'jaar') renderYearCalendar(containerId, projects);
+  else renderMonthCalendar(containerId, projects);
+}
+function calModeToggleHtml() {
+  return `<div class="tl-zoom"><button data-mode="maand" class="${calState.mode==='maand'?'active':''}">Maand</button><button data-mode="jaar" class="${calState.mode==='jaar'?'active':''}">Jaar</button></div>`;
+}
+function wireCalControls(containerId, projects) {
+  document.querySelectorAll('[data-mode]').forEach(btn => {
+    btn.onclick = () => { calState.mode = btn.dataset.mode; renderHomeCalendar(containerId, projects); };
+  });
+  document.getElementById('calPrev').onclick = () => {
+    calState.anchor = calState.mode === 'jaar' ? new Date(calState.anchor.getFullYear()-1, calState.anchor.getMonth(), 1) : new Date(calState.anchor.getFullYear(), calState.anchor.getMonth()-1, 1);
+    renderHomeCalendar(containerId, projects);
+  };
+  document.getElementById('calNext').onclick = () => {
+    calState.anchor = calState.mode === 'jaar' ? new Date(calState.anchor.getFullYear()+1, calState.anchor.getMonth(), 1) : new Date(calState.anchor.getFullYear(), calState.anchor.getMonth()+1, 1);
+    renderHomeCalendar(containerId, projects);
+  };
+  document.getElementById('calToday').onclick = () => { calState.anchor = new Date(); renderHomeCalendar(containerId, projects); };
+}
+function renderYearCalendar(containerId, projects) {
+  const container = document.getElementById(containerId);
+  const year = calState.anchor.getFullYear();
+  const today = new Date();
+  const months = [];
+  for (let m = 0; m < 12; m++) {
+    const monthStart = new Date(year, m, 1);
+    const monthEnd = new Date(year, m+1, 0);
+    const active = projects.filter(p => {
+      const s = p.start_date ? new Date(p.start_date) : null;
+      if (!s) return false;
+      const end = p.launch_date ? new Date(p.launch_date) : s;
+      return end >= monthStart && s <= monthEnd;
+    });
+    months.push({ label: monthStart.toLocaleDateString('nl-NL',{month:'long'}), monthStart, active });
+  }
+  const monthCardHtml = (m) => {
+    const isCurrent = today.getFullYear()===year && today.getMonth()===m.monthStart.getMonth();
+    const shown = m.active.slice(0,5);
+    const extra = m.active.length - shown.length;
+    return `<div class="year-month-card ${isCurrent?'current':''}">
+      <div class="year-month-label">${m.label.charAt(0).toUpperCase()+m.label.slice(1)}</div>
+      <div class="year-month-pills">
+        ${shown.map(p => `<div class="cal-chip" style="background:${p.color}" onclick="openProject('${p.id}')" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>`).join('')}
+        ${extra > 0 ? `<div class="cal-chip more">+${extra} meer</div>` : ''}
+        ${!m.active.length ? '<div class="year-month-empty">\u2014</div>' : ''}
+      </div>
+    </div>`;
+  };
+  container.innerHTML = `
+    <div class="cal-controls">
+      <div class="cal-title">${year}</div>
+      <div class="cal-nav">${calModeToggleHtml()}<button class="icon" id="calPrev">\u2190</button><button class="small" id="calToday">Vandaag</button><button class="icon" id="calNext">\u2192</button></div>
+    </div>
+    <div class="year-grid">${months.map(monthCardHtml).join('')}</div>
+  `;
+  wireCalControls(containerId, projects);
+}
+function renderMonthCalendar(containerId, projects) {
+  const container = document.getElementById(containerId);
+  const anchor = calState.anchor;
+  const monthStart = startOfMonth(anchor);
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(gridStart.getDate() - ((monthStart.getDay()+6)%7));
+  const today = new Date();
+  const weeks = [];
+  let cur = new Date(gridStart);
+  for (let w = 0; w < 6; w++) {
+    const days = []; for (let d = 0; d < 7; d++) { days.push(new Date(cur)); cur.setDate(cur.getDate()+1); }
+    weeks.push(days);
+    if (cur > monthStart && cur.getMonth() !== monthStart.getMonth() && w >= 4) break;
+  }
+  const weekHtml = (week) => {
+    const daynumCells = week.map(day => {
+      const inMonth = day.getMonth() === monthStart.getMonth();
+      const isToday = isSameDay(day, today);
+      return `<div class="cal-daynum-cell ${inMonth?'':'other-month'} ${isToday?'today':''}"><span class="cal-daynum">${day.getDate()}</span></div>`;
+    }).join('');
+    const bandRows = computeWeekBands(week, projects);
+    const bandRowsHtml = bandRows.map(row => `
+      <div class="cal-band-grid">
+        ${row.map(b => `<div class="cal-band" style="grid-column:${b.colStart+1} / ${b.colEnd+2};border:1.5px solid ${b.color};color:${b.color};background:var(--panel)" onclick="openProject('${b.id}')" title="${escapeHtml(b.label)}">${escapeHtml(b.label)}</div>`).join('')}
+      </div>
+    `).join('');
+    const singleCells = week.map(day => {
+      const items = singleDayItemsForDay(day, projects);
+      const shown = items.slice(0,2);
+      const extra = items.length - shown.length;
+      return `<div class="cal-single-cell">
+        ${shown.map(e => `<div class="cal-chip" style="background:${e.color}" onclick="openProject('${e.id}')" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</div>`).join('')}
+        ${extra > 0 ? `<div class="cal-chip more" style="background:transparent;color:var(--text-faint);">+${extra} meer</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="cal-week-wrap">
+      <div class="cal-daynum-grid">${daynumCells}</div>
+      ${bandRowsHtml}
+      <div class="cal-single-grid">${singleCells}</div>
+    </div>`;
+  };
+  const monthLabel = anchor.toLocaleDateString('nl-NL', {month:'long', year:'numeric'});
+  container.innerHTML = `
+    <div class="cal-controls">
+      <div class="cal-title">${monthLabel.charAt(0).toUpperCase()+monthLabel.slice(1)}</div>
+      <div class="cal-nav">${calModeToggleHtml()}<button class="icon" id="calPrev">\u2190</button><button class="small" id="calToday">Vandaag</button><button class="icon" id="calNext">\u2192</button></div>
+    </div>
+    <div class="cal-grid">
+      <div class="cal-weekdays"><div>Ma</div><div>Di</div><div>Wo</div><div>Do</div><div>Vr</div><div>Za</div><div>Zo</div></div>
+      <div class="cal-weeks">${weeks.map(weekHtml).join('')}</div>
+    </div>
+  `;
+  wireCalControls(containerId, projects);
+}
+
+function renderProjectList(containerId, projects) {
+  const container = document.getElementById(containerId);
+  if (!projects.length) { container.innerHTML = ''; return; }
+  const rows = projects.map(p => {
+    const cd = countdownLabel(p.launch_date);
+    return `
+      <div class="proj-row" onclick="openProject('${p.id}')">
+        <span class="dot" style="background:${p.color}"></span>
+        <span class="p-name">${escapeHtml(p.name)}</span>
+        <span class="p-period">${isoToDutch(p.start_date)} \u2192 ${p.launch_date ? isoToDutch(p.launch_date) : '?'}</span>
+        <span class="p-status status-${p.status}">${statusLabel(p.status)}</span>
+        <span class="p-countdown ${cd.cls}">${cd.text}</span>
+        <button class="proj-row-delete" title="Project verwijderen" onclick="event.stopPropagation(); deleteProjectUI('${p.id}','${escapeHtml(p.name).replace(/'/g,'&#39;')}')">\u00d7</button>
+      </div>
+    `;
+  }).join('');
+  container.innerHTML = `<div class="proj-list"><h3>Alle projecten</h3>${rows}</div>`;
+}
+function renderStatsChart(stats, audioType) {
+  if (!stats.length) return '<div class="state-msg" style="padding:20px 0;">Nog geen cijfers ingevoerd. Voeg hieronder een week toe.</div>';
+  const thresholds = audioType === 'audio_video' ? {orange:2500, green:6500} : {orange:1500, green:4500};
+  const width=640,height=220,padL=44,padR=16,padT=16,padB=28;
+  const plotW=width-padL-padR, plotH=height-padT-padB;
+  const combinedOf = s => (s.downloads||0) + (s.youtube_views||0);
+  const maxVal = Math.max(thresholds.green*1.15, ...stats.map(combinedOf), 1);
+  const n = stats.length;
+  const xFor = i => padL + (n<=1?plotW/2:(i/(n-1))*plotW);
+  const yFor = v => padT+plotH-(v/maxVal)*plotH;
+  window.__chartGeom = { stats, xFor, yFor, padL, padT, plotW, plotH, width, height };
+
+  const combPts = stats.map((s,i)=>`${xFor(i)},${yFor(combinedOf(s))}`).join(' ');
+  const dlPts = stats.map((s,i)=>`${xFor(i)},${yFor(s.downloads||0)}`).join(' ');
+  const ytPts = stats.map((s,i)=>`${xFor(i)},${yFor(s.youtube_views||0)}`).join(' ');
+  const zones = `
+    <rect x="${padL}" y="${padT}" width="${plotW}" height="${Math.max(0,yFor(thresholds.green)-padT)}" fill="var(--green)" opacity="0.07"/>
+    <rect x="${padL}" y="${yFor(thresholds.green)}" width="${plotW}" height="${Math.max(0,yFor(thresholds.orange)-yFor(thresholds.green))}" fill="var(--orange)" opacity="0.07"/>
+    <rect x="${padL}" y="${yFor(thresholds.orange)}" width="${plotW}" height="${Math.max(0,padT+plotH-yFor(thresholds.orange))}" fill="var(--red)" opacity="0.07"/>`;
+  const dashedLines = `
+    <line x1="${padL}" y1="${yFor(thresholds.green)}" x2="${padL+plotW}" y2="${yFor(thresholds.green)}" stroke="var(--green)" stroke-dasharray="4,3" stroke-width="1"/>
+    <text x="${padL+plotW-2}" y="${yFor(thresholds.green)-4}" text-anchor="end" font-size="9" fill="var(--green)">groen</text>
+    <line x1="${padL}" y1="${yFor(thresholds.orange)}" x2="${padL+plotW}" y2="${yFor(thresholds.orange)}" stroke="var(--orange)" stroke-dasharray="4,3" stroke-width="1"/>
+    <text x="${padL+plotW-2}" y="${yFor(thresholds.orange)-4}" text-anchor="end" font-size="9" fill="var(--orange)">oranje</text>`;
+  const xLabels = stats.map((s,i)=>`<text x="${xFor(i)}" y="${height-8}" text-anchor="middle" font-size="9" fill="var(--text-faint)">${escapeHtml(s.week_label||('w'+s.week_number))}</text>`).join('');
+  const yTickCount = 4;
+  let yGridLines = '';
+  for (let i = 0; i <= yTickCount; i++) {
+    const val = (maxVal / yTickCount) * i;
+    const y = yFor(val);
+    yGridLines += `
+      <line x1="${padL}" y1="${y}" x2="${padL+plotW}" y2="${y}" stroke="var(--border)" stroke-width="1" opacity="0.5"/>
+      <text x="${padL-6}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--text-faint)">${formatAxisNumber(val)}</text>
+    `;
+  }
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" id="statsChartSvg" class="stats-chart-svg" style="overflow:visible;display:block;" onmousemove="handleChartHover(event)" onmouseleave="hideChartHover()">
+      ${yGridLines}
+      ${zones}
+      ${dashedLines}
+      <polyline points="${dlPts}" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.55"/>
+      <polyline points="${ytPts}" fill="none" stroke="#c05fd1" stroke-width="1.5" opacity="0.55"/>
+      <polyline points="${combPts}" fill="none" stroke="#f4f1ea" stroke-width="2.5"/>
+      ${stats.map((s,i)=>`<circle cx="${xFor(i)}" cy="${yFor(combinedOf(s))}" r="3" fill="#f4f1ea"/>`).join('')}
+      ${xLabels}
+      <g id="chartCrosshair" style="display:none;">
+        <line id="crossLine" x1="0" y1="${padT}" x2="0" y2="${padT+plotH}" stroke="var(--text-faint)" stroke-width="1"/>
+      </g>
+    </svg>
+    <div class="chart-legend"><span><i style="background:#f4f1ea"></i>Totaal (benchmark)</span><span><i style="background:var(--accent)"></i>Springcast</span><span><i style="background:#c05fd1"></i>YouTube</span></div>
+    <div id="chartTooltip" class="chart-tooltip hidden"></div>
+  `;
+}
+function handleChartHover(evt) {
+  const geom = window.__chartGeom;
+  if (!geom) return;
+  const svg = document.getElementById('statsChartSvg');
+  const rect = svg.getBoundingClientRect();
+  const scaleX = geom.width / rect.width;
+  const xInSvg = (evt.clientX - rect.left) * scaleX;
+  let nearest = 0, bestDist = Infinity;
+  geom.stats.forEach((s,i) => { const d = Math.abs(geom.xFor(i) - xInSvg); if (d < bestDist) { bestDist = d; nearest = i; } });
+  const s = geom.stats[nearest];
+  const total = (s.downloads||0) + (s.youtube_views||0);
+  const cross = document.getElementById('chartCrosshair');
+  const line = document.getElementById('crossLine');
+  if (!cross || !line) return;
+  cross.style.display = '';
+  line.setAttribute('x1', geom.xFor(nearest)); line.setAttribute('x2', geom.xFor(nearest));
+  const tooltip = document.getElementById('chartTooltip');
+  tooltip.classList.remove('hidden');
+  tooltip.innerHTML = `<b>${escapeHtml(s.week_label || ('week '+s.week_number))}</b><br>Totaal: ${total}<br>Springcast: ${s.downloads ?? '\u2013'}<br>YouTube: ${s.youtube_views ?? '\u2013'}`;
+  const svgRect = svg.getBoundingClientRect();
+  const px = (geom.xFor(nearest)/geom.width)*svgRect.width;
+  tooltip.style.left = Math.min(px + 10, svgRect.width - 130) + 'px';
+  tooltip.style.top = '4px';
+}
+function hideChartHover() {
+  const cross = document.getElementById('chartCrosshair'); if (cross) cross.style.display = 'none';
+  const tooltip = document.getElementById('chartTooltip'); if (tooltip) tooltip.classList.add('hidden');
+}
+async function addStatWeek(projectId) {
+  if (!requireOwner()) return;
+  const weekVal = document.getElementById('statWeek').value.trim();
+  const downloads = document.getElementById('statDownloads').value;
+  const youtube = document.getElementById('statYoutube').value;
+  if (!weekVal) { alert('Vul een weeknummer in.'); return; }
+  await sbInsert('podcast_stats', [{ id: uid('stat'), project_id: projectId, week_number: Number(weekVal) || 0, week_label: 'week ' + weekVal, downloads: downloads ? Number(downloads) : null, youtube_views: youtube ? Number(youtube) : null }]);
+  openProject(projectId);
+}
+async function editStatWeek(projectId, statId) {
+  if (!requireOwner()) return;
+  const row = (await sbSelect('podcast_stats', 'id=eq.' + statId + '&select=*'))[0];
+  if (!row) return;
+  renderModal(`
+    <h2>Week aanpassen</h2>
+    <div class="field"><label>Weeklabel</label><input type="text" id="esWeekLabel" value="${escapeHtml(row.week_label || '')}"></div>
+    <div class="field-row">
+      <div class="field"><label>Springcast downloads</label><input type="text" id="esDownloads" value="${row.downloads ?? ''}"></div>
+      <div class="field"><label>YouTube views</label><input type="text" id="esYoutube" value="${row.youtube_views ?? ''}"></div>
+    </div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalSave').onclick = async () => {
+    const dl = document.getElementById('esDownloads').value.trim();
+    const yt = document.getElementById('esYoutube').value.trim();
+    await sbUpdate('podcast_stats', 'id=eq.' + statId, {
+      week_label: document.getElementById('esWeekLabel').value.trim(),
+      downloads: dl ? Number(dl) : null,
+      youtube_views: yt ? Number(yt) : null
+    });
+    closeModal(); openProject(projectId);
+  };
+}
+async function deleteStatWeek(projectId, statId) {
+  if (!requireOwner()) return;
+  if (!confirm('Deze week verwijderen?')) return;
+  await sbDelete('podcast_stats', 'id=eq.' + statId);
+  openProject(projectId);
+}
+
+const PLATFORM_DEFS = [
+  { key: 'spotify', field: 'spotify_url', label: 'Spotify', cls: 'spotify' },
+  { key: 'apple', field: 'apple_url', label: 'Apple Podcasts', cls: 'apple' },
+  { key: 'youtube', field: 'youtube_url', label: 'YouTube', cls: 'youtube' }
+];
+function platformButtonsHtml(table, id, entity) {
+  return `<div class="platform-buttons">${PLATFORM_DEFS.map(p => `
+    <button class="platform-btn ${p.cls}" onclick="handlePlatformClick('${table}','${id}','${p.field}','${(entity[p.field]||'').replace(/'/g,"&#39;")}')">${p.label}</button>
+  `).join('')}</div>`;
+}
+function handlePlatformClick(table, id, field, existingUrl) {
+  if (existingUrl) { window.open(existingUrl, '_blank'); return; }
+  if (!requireOwner()) return;
+  const label = PLATFORM_DEFS.find(p => p.field === field).label;
+  renderModal(`
+    <h2>${label}-link toevoegen</h2>
+    <div class="field"><label>URL</label><input type="text" id="platformUrlInput" placeholder="https://..."></div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('platformUrlInput').focus();
+  document.getElementById('modalSave').onclick = async () => {
+    const url = document.getElementById('platformUrlInput').value.trim();
+    if (!url) return;
+    try {
+      await sbUpdate(table, 'id=eq.' + id, { [field]: url });
+      closeModal();
+      if (table === 'projects') openProject(id);
+      else loadLiveShows();
+    } catch (err) { alert('Opslaan mislukt: ' + err.message); }
+  };
+}
+
+// ================= Live shows page =================
+async function loadLiveShows() {
+  const view = document.getElementById('liveShowsView');
+  view.innerHTML = '<div class="state-msg">Laden\u2026</div>';
+  try {
+    const shows = await sbSelect('live_shows', 'select=*&order=name.asc');
+    const stats2026 = shows.length ? await sbSelect('show_stats', 'year=eq.2026&select=show_id,week_number,downloads,youtube_views&order=week_number.asc') : [];
+    window.__comparisonStats = stats2026;
+    window.__comparisonShows = shows;
+    view.innerHTML = `
+      ${shows.length ? `
+      <div class="benchmark-section" style="margin-bottom:20px;">
+        <h3>Vergelijk lopende podcasts (2026)</h3>
+        <div class="compare-toggles" id="compareToggles">
+          ${shows.map(s => `<label class="year-checkbox"><input type="checkbox" data-show="${s.id}" checked onchange="refreshComparisonChart()"> ${escapeHtml(s.name)}</label>`).join('')}
+        </div>
+        <div id="comparisonChartWrap">${renderComparisonChartSvg(stats2026, shows)}</div>
+      </div>` : ''}
+      <div class="live-shows-grid">
+        ${shows.map(s => `
+          <div class="live-show-tile" onclick="openShow('${s.id}')">
+            <button class="live-show-delete" onclick="event.stopPropagation(); deleteLiveShow('${s.id}')">\u00d7</button>
+            <div class="live-show-logo-lg" id="logo_${s.id}"></div>
+            <span class="live-show-name">${escapeHtml(s.name)}</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="add-show-row" style="margin-top:14px;">
+        <input type="text" id="newShowName" placeholder="+ podcast toevoegen" onkeydown="if(event.key==='Enter') addLiveShow()">
+        <button class="small primary" onclick="addLiveShow()">Toevoegen</button>
+      </div>
+    `;
+    shows.forEach(s => loadShowArtwork(s.id, s.name));
+  } catch (e) {
+    view.innerHTML = `<div class="state-msg">Kon lopende podcasts niet laden (${escapeHtml(e.message)}).<br><button class="small" onclick="loadLiveShows()">Opnieuw proberen</button></div>`;
+  }
+}
+const CHART_LINE_COLORS = ['#5b8def','#e0a63a','#4caf7d','#e2585a','#a97fd1','#3ab7c9','#e08a5c','#c05fd1','#8ece63','#e2c53a','#79b0e0','#d9737d'];
+
+function refreshComparisonChart() {
+  const checkedIds = Array.from(document.querySelectorAll('#compareToggles input:checked')).map(el => el.dataset.show);
+  const filtered = (window.__comparisonStats || []).filter(s => checkedIds.includes(s.show_id));
+  document.getElementById('comparisonChartWrap').innerHTML = renderComparisonChartSvg(filtered, window.__comparisonShows || []);
+}
+function renderComparisonChartSvg(stats, shows) {
+  if (!stats.length) return '<div class="state-msg" style="padding:20px 0;">Geen cijfers om te tonen.</div>';
+  const width=640,height=220,padL=44,padR=16,padT=16,padB=28;
+  const plotW=width-padL-padR, plotH=height-padT-padB;
+  const byShow = {};
+  stats.forEach(s => { (byShow[s.show_id]=byShow[s.show_id]||[]).push(s); });
+  Object.values(byShow).forEach(arr=>arr.sort((a,b)=>a.week_number-b.week_number));
+  const combinedOf = s => (s.downloads||0)+(s.youtube_views||0);
+  const maxWeek = Math.max(...stats.map(s=>s.week_number),1);
+  const maxVal = Math.max(...stats.map(combinedOf),1);
+  const xFor = w => padL + ((w-1)/(Math.max(maxWeek-1,1)))*plotW;
+  const yFor = v => padT+plotH-(v/maxVal)*plotH;
+  const showMap = {}; (shows||[]).forEach(s=>showMap[s.id]=s);
+  const showIds = Object.keys(byShow);
+  window.__compareChartGeom = { byShow, xFor, yFor, width, height, combinedOf, showMap };
+  const lines = showIds.map((showId,i) => {
+    const arr = byShow[showId];
+    const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+    const pts = arr.map(s=>`${xFor(s.week_number)},${yFor(combinedOf(s))}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>${arr.map(s=>`<circle cx="${xFor(s.week_number)}" cy="${yFor(combinedOf(s))}" r="2.5" fill="${color}"/>`).join('')}`;
+  }).join('');
+  const legend = showIds.map((showId,i) => `<span><i style="background:${CHART_LINE_COLORS[i % CHART_LINE_COLORS.length]}"></i>${escapeHtml(showMap[showId]?showMap[showId].name:showId)}</span>`).join('');
+  const axes = renderChartAxes({ padL, padT, plotW, plotH, maxWeek, maxVal, xFor, yFor });
+  return `
+    <svg viewBox="0 0 ${width} ${height}" id="compareChartSvg" class="stats-chart-svg" onmousemove="handleCompareChartHover(event)" onmouseleave="hideCompareChartHover()">
+      ${axes}${lines}
+      <g id="compareCrosshair" style="display:none;"><line id="compareCrossLine" x1="0" y1="${padT}" x2="0" y2="${padT+plotH}" stroke="var(--text-faint)" stroke-width="1"/></g>
+    </svg>
+    <div class="chart-legend">${legend}</div>
+    <div id="compareChartTooltip" class="chart-tooltip hidden"></div>
+  `;
+}
+function handleCompareChartHover(evt) {
+  const geom = window.__compareChartGeom;
+  if (!geom) return;
+  const svg = document.getElementById('compareChartSvg');
+  const rect = svg.getBoundingClientRect();
+  const scaleX = geom.width / rect.width;
+  const xInSvg = (evt.clientX - rect.left) * scaleX;
+  const allWeeks = [...new Set(Object.values(geom.byShow).flat().map(s=>s.week_number))].sort((a,b)=>a-b);
+  if (!allWeeks.length) return;
+  let nearestWeek = allWeeks[0], bestDist = Infinity;
+  allWeeks.forEach(w => { const d = Math.abs(geom.xFor(w) - xInSvg); if (d < bestDist) { bestDist = d; nearestWeek = w; } });
+  const cross = document.getElementById('compareCrosshair');
+  const line = document.getElementById('compareCrossLine');
+  if (!cross || !line) return;
+  cross.style.display = '';
+  line.setAttribute('x1', geom.xFor(nearestWeek)); line.setAttribute('x2', geom.xFor(nearestWeek));
+  const tooltip = document.getElementById('compareChartTooltip');
+  tooltip.classList.remove('hidden');
+  let html = `<b>week ${nearestWeek}</b>`;
+  Object.keys(geom.byShow).forEach((showId, i) => {
+    const match = geom.byShow[showId].find(s => s.week_number === nearestWeek);
+    if (!match) return;
+    const name = geom.showMap[showId] ? geom.showMap[showId].name : showId;
+    const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+    html += `<br><span style="color:${color}">${escapeHtml(name)}</span>: ${geom.combinedOf(match)} <span style="color:var(--text-faint)">(Springcast ${match.downloads ?? 0}, YouTube ${match.youtube_views ?? 0})</span>`;
+  });
+  tooltip.innerHTML = html;
+  const svgRect = svg.getBoundingClientRect();
+  const px = (geom.xFor(nearestWeek)/geom.width)*svgRect.width;
+  tooltip.style.left = Math.min(px+10, svgRect.width-220) + 'px';
+  tooltip.style.top = '4px';
+}
+function hideCompareChartHover() {
+  const cross = document.getElementById('compareCrosshair'); if (cross) cross.style.display = 'none';
+  const tooltip = document.getElementById('compareChartTooltip'); if (tooltip) tooltip.classList.add('hidden');
+}
+async function loadShowArtwork(showId, name) {
+  const el = document.getElementById('logo_' + showId);
+  if (!el) return;
+  try {
+    const res = await fetch('https://itunes.apple.com/search?term=' + encodeURIComponent(name) + '&media=podcast&limit=1');
+    const data = await res.json();
+    const artwork = data.results && data.results[0] ? (data.results[0].artworkUrl600 || data.results[0].artworkUrl100) : null;
+    if (artwork && document.getElementById('logo_' + showId)) {
+      document.getElementById('logo_' + showId).innerHTML = `<img src="${artwork}" alt="">`;
+    }
+  } catch (e) { /* geen artwork gevonden, laat placeholder staan */ }
+}
+async function addLiveShow() {
+  if (!requireOwner()) return;
+  const input = document.getElementById('newShowName');
+  const name = input.value.trim(); if (!name) return;
+  await sbInsert('live_shows', [{ id: uid('show'), name }]);
+  loadLiveShows();
+}
+async function deleteLiveShow(id) {
+  if (!requireOwner()) return;
+  if (!confirm('Deze podcast uit het overzicht verwijderen?')) return;
+  await sbDelete('live_shows', 'id=eq.' + id);
+  loadLiveShows();
+}
+function showLiveShowsView(fromHistory) {
+  document.getElementById('homeView').classList.add('hidden');
+  document.getElementById('detailView').classList.add('hidden');
+  document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('liveShowsView').classList.remove('hidden');
+  document.getElementById('navHome').classList.remove('active');
+  document.getElementById('navLiveShows').classList.add('active');
+  if (!fromHistory) history.pushState({ view: 'shows' }, '', window.location.pathname + '?view=shows');
+  loadLiveShows();
+}
+function showHomeFromNav(fromHistory) {
+  document.getElementById('liveShowsView').classList.add('hidden');
+  document.getElementById('detailView').classList.add('hidden');
+  document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('homeView').classList.remove('hidden');
+  document.getElementById('navLiveShows').classList.remove('active');
+  document.getElementById('navHome').classList.add('active');
+  if (!fromHistory) history.pushState({ view: 'home' }, '', window.location.pathname);
+  loadHome();
+}
+
+const YEAR_COLORS = { 2026: '#f4f1ea', 2025: '#e0a63a', 2024: '#4caf7d' };
+
+async function openShow(showId, fromHistory, isShared) {
+  if (!fromHistory && !isShared) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('show') !== showId) {
+      history.pushState({ view: 'show', id: showId }, '', window.location.pathname + '?show=' + encodeURIComponent(showId));
+    }
+  }
+  document.getElementById('homeView').classList.add('hidden');
+  document.getElementById('liveShowsView').classList.add('hidden');
+  document.getElementById('detailView').classList.add('hidden');
+  const view = document.getElementById('showDetailView');
+  view.classList.remove('hidden');
+  view.innerHTML = '<div class="state-msg">Laden\u2026</div>';
+  let show, stats;
+  try {
+    [show, stats] = await Promise.all([
+      sbSelect('live_shows', 'id=eq.' + showId + '&select=*').then(r => r[0]),
+      sbSelect('show_stats', 'show_id=eq.' + showId + '&select=*&order=year.asc,week_number.asc')
+    ]);
+  } catch (e) {
+    view.innerHTML = `<div class="state-msg">Kon podcast niet laden (${escapeHtml(e.message)}).<br><button class="small" onclick="openShow('${showId}',true)">Opnieuw proberen</button></div>`;
+    return;
+  }
+  if (!show) { view.innerHTML = '<div class="state-msg">Podcast niet gevonden.</div>'; return; }
+
+  window.__showStatsCache = window.__showStatsCache || {};
+  window.__showStatsCache[showId] = stats;
+  window.__showAudioType = window.__showAudioType || {};
+  window.__showAudioType[showId] = show.audio_type || 'audio';
+
+  const yearsPresent = [...new Set(stats.map(s => s.year))];
+  [2024,2025,2026].forEach(y => { if (!yearsPresent.includes(y)) yearsPresent.push(y); });
+
+  view.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-header-left">
+        ${isShared ? '' : `<button class="back-btn ghost" onclick="closeShowDetail()">\u2190 terug</button>`}
+        <div>
+          <div class="detail-title-row">
+            <h2 class="detail-title">${escapeHtml(show.name)}</h2>
+            ${isShared ? '' : `<button class="ghost edit-project-btn" onclick="editShowAudioType('${show.id}','${show.audio_type||'audio'}')">\u270e type</button><button class="ghost share-project-btn" onclick="shareShow('${show.id}')">\u{1F517} Delen</button>`}
+          </div>
+        </div>
+      </div>
+      ${isShared ? '' : `
+      <div class="detail-header-right">
+        ${recButtonHtml('recBtn_show_' + showId, { showId })}
+      </div>`}
+    </div>
+    ${isShared ? '' : `
+    <div class="detail-tabs">
+      <button class="detail-tab-btn active" id="showTabBtn_stats_${showId}" onclick="switchShowTab('${showId}','stats')">Luistercijfers</button>
+      <button class="detail-tab-btn" id="showTabBtn_project_${showId}" onclick="switchShowTab('${showId}','project')">Project</button>
+    </div>`}
+    <div id="showTabContent_stats_${showId}" class="detail-tab-content">
+      ${platformButtonsHtml('live_shows', show.id, show)}
+      <div class="year-toggle-row" id="yearToggle_${showId}">
+        ${[2024,2025,2026].map(y => `<label class="year-checkbox"><input type="checkbox" data-year="${y}" ${y===2026?'checked':''} onchange="refreshShowChart('${showId}')"> <span style="color:${YEAR_COLORS[y]}">${y}</span></label>`).join('')}
+      </div>
+      <div class="metric-toggle-row" id="metricToggle_${showId}">
+        ${METRIC_DEFS.map(m => `<label class="year-checkbox"><input type="checkbox" data-metric="${m.key}" ${m.defaultOn?'checked':''} onchange="refreshShowChart('${showId}')"> <span style="color:${m.color}">${m.label}</span></label>`).join('')}
+      </div>
+      <div class="benchmark-section">
+        <div id="showChartWrap_${showId}">${renderShowChart(showId, stats.filter(s=>s.year===2026), window.__showAudioType[showId], METRIC_DEFS.filter(m=>m.defaultOn).map(m=>m.key))}</div>
+        <div class="stats-add-row">
+          <input type="text" placeholder="jaar" id="showStatYear_${showId}" style="width:60px;" value="2026">
+          <input type="text" placeholder="week" id="showStatWeek_${showId}" style="width:60px;">
+          <input type="number" placeholder="Springcast downloads" id="showStatDownloads_${showId}">
+          <input type="number" placeholder="YouTube views" id="showStatYoutube_${showId}">
+          <button class="small primary" onclick="addShowStatWeek('${showId}')">Toevoegen</button>
+        </div>
+        ${stats.length ? `
+        <div id="statsMonthWrap_${showId}"></div>
+      ` : ''}
+    </div>
+    <div id="showTabContent_project_${showId}" class="detail-tab-content hidden"></div>
+  `;
+  if (stats.length) renderStatsMonthPager(showId, 0);
+}
+async function switchShowTab(showId, tabName) {
+  ['stats', 'project'].forEach(t => {
+    document.getElementById('showTabContent_' + t + '_' + showId).classList.toggle('hidden', t !== tabName);
+    document.getElementById('showTabBtn_' + t + '_' + showId).classList.toggle('active', t === tabName);
+  });
+  if (tabName === 'project') {
+    const container = document.getElementById('showTabContent_project_' + showId);
+    if (!container.dataset.loaded) {
+      if (!isOwner) {
+        container.innerHTML = `<div class="state-msg">Ontgrendel eerst met Face ID/Touch ID (het slotje rechtsboven) om deze pagina te gebruiken.<br><button class="small" onclick="switchShowTab('${showId}','project')">Opnieuw proberen</button></div>`;
+        return;
+      }
+      container.innerHTML = '<div class="state-msg">Laden\u2026</div>';
+      try {
+        const linkedId = await ensureLinkedProject(showId);
+        await renderEmbeddedProject(linkedId, container);
+        container.dataset.loaded = '1';
+      } catch (err) {
+        container.innerHTML = `<div class="state-msg">Kon dit tabblad niet laden (${escapeHtml(err.message)}).<br><button class="small" onclick="switchShowTab('${showId}','project')">Opnieuw proberen</button></div>`;
+      }
+    }
+  }
+}
+async function ensureLinkedProject(showId) {
+  const show = (await sbSelect('live_shows', 'id=eq.' + showId + '&select=linked_project_id,name'))[0];
+  if (show.linked_project_id) return show.linked_project_id;
+  const newId = uid('proj');
+  await sbInsert('projects', [{ id: newId, name: show.name, type: 'overig', status: 'live', color: '#7f8fd9', start_date: new Date().toISOString(), is_show_project: true }]);
+  await sbUpdate('live_shows', 'id=eq.' + showId, { linked_project_id: newId });
+  return newId;
+}
+async function renderEmbeddedProject(projectId, container) {
+  container.innerHTML = '<div class="state-msg">Laden\u2026</div>';
+  const [steps, meetingNotes] = await Promise.all([
+    sbSelect('project_steps', 'project_id=eq.' + projectId + '&select=*&order=order_num.asc'),
+    sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc')
+  ]);
+  container.innerHTML = `
+    <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+      ${recButtonHtml('recBtn_embed_' + projectId, { projectId })}
+    </div>
+    <div class="detail-tabs">
+      <button class="detail-tab-btn active" id="tabBtn_overzicht_${projectId}" onclick="switchDetailTab('${projectId}','overzicht')">To-do's</button>
+      <button class="detail-tab-btn" id="tabBtn_meetings_${projectId}" onclick="switchDetailTab('${projectId}','meetings')">Meetings${meetingNotes.length ? ' (' + meetingNotes.length + ')' : ''}</button>
+    </div>
+    <div id="tabContent_overzicht_${projectId}" class="detail-tab-content">
+      <div class="tracks single">
+        <div class="track-col">
+          <div class="track-head"><div class="track-head-left"><span class="dot" style="background:#8a7fd9"></span>To-do's</div></div>
+          <div class="step-list" id="steplist_taken" data-track="taken" data-project="${projectId}">
+            ${sortForDisplay(steps).map(s => stepHtml(projectId, s, true)).join('')}
+          </div>
+          <div class="add-step-row">
+            <input type="text" placeholder="+ taak toevoegen" id="addstep_taken" onkeydown="if(event.key==='Enter') addStepUI('${projectId}','taken')">
+            <button class="small" onclick="addStepUI('${projectId}','taken')">Toevoegen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="tabContent_meetings_${projectId}" class="detail-tab-content hidden">
+      <div id="meetingList_${projectId}">${meetingNotesListHtml(projectId, meetingNotes)}</div>
+    </div>
+  `;
+  setupDragDrop(document.getElementById('steplist_taken'));
+}
+function isoWeekMonday(year, week) {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4); week1Monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+  const target = new Date(week1Monday); target.setUTCDate(week1Monday.getUTCDate() + (week - 1) * 7);
+  return target;
+}
+const MONTH_NAMES_NL = ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+function groupStatsByMonth(stats) {
+  const buckets = {};
+  stats.forEach(s => {
+    const d = isoWeekMonday(s.year, s.week_number);
+    const key = d.getUTCFullYear() + '-' + d.getUTCMonth();
+    if (!buckets[key]) buckets[key] = { year: d.getUTCFullYear(), month: d.getUTCMonth(), weeks: [] };
+    buckets[key].weeks.push(s);
+  });
+  const groups = Object.values(buckets).map(g => {
+    g.weeks.sort((a,b) => b.week_number - a.week_number || b.year - a.year);
+    const springcastSum = g.weeks.reduce((sum,s) => sum + (s.downloads||0), 0);
+    const youtubeSum = g.weeks.reduce((sum,s) => sum + (s.youtube_views||0), 0);
+    g.label = MONTH_NAMES_NL[g.month].charAt(0).toUpperCase() + MONTH_NAMES_NL[g.month].slice(1) + ' ' + g.year;
+    g.springcastSum = springcastSum;
+    g.youtubeSum = youtubeSum;
+    g.totalSum = springcastSum + youtubeSum;
+    return g;
+  });
+  groups.sort((a,b) => (b.year - a.year) || (b.month - a.month));
+  return groups;
+}
+function renderStatsMonthPager(showId, groupIndex) {
+  const stats = window.__showStatsCache[showId] || [];
+  const groups = groupStatsByMonth(stats);
+  if (!groups.length) return;
+  groupIndex = Math.max(0, Math.min(groupIndex, groups.length - 1));
+  const g = groups[groupIndex];
+  const wrap = document.getElementById('statsMonthWrap_' + showId);
+  wrap.innerHTML = `
+    <div class="stats-month-header">
+      <button class="ghost small" ${groupIndex >= groups.length-1 ? 'disabled' : ''} onclick="renderStatsMonthPager('${showId}', ${groupIndex+1})">\u2190 vorige maand</button>
+      <div class="stats-month-title">${g.label}</div>
+      <button class="ghost small" ${groupIndex <= 0 ? 'disabled' : ''} onclick="renderStatsMonthPager('${showId}', ${groupIndex-1})">volgende maand \u2192</button>
+    </div>
+    <div class="stats-month-summary">
+      <span>Springcast: <b>${g.springcastSum.toLocaleString('nl-NL')}</b></span>
+      <span>YouTube: <b>${g.youtubeSum.toLocaleString('nl-NL')}</b></span>
+      <span>Totaal: <b>${g.totalSum.toLocaleString('nl-NL')}</b></span>
+    </div>
+    <div class="stats-list">${g.weeks.map(s => `
+      <div class="stats-list-row">
+        <span class="stats-list-week">${s.year} \u00b7 ${escapeHtml(s.week_label || ('week '+s.week_number))}</span>
+        <span class="stats-list-val">Springcast: ${s.downloads ?? '\u2013'}</span>
+        <span class="stats-list-val">YouTube: ${s.youtube_views ?? '\u2013'}</span>
+        <button class="stats-list-btn" onclick="editShowStat('${showId}','${s.id}')">\u270e</button>
+        <button class="stats-list-btn" onclick="deleteShowStat('${showId}','${s.id}')">\u00d7</button>
+      </div>
+    `).join('')}</div>
+  `;
+}
+const METRIC_DEFS = [
+  { key: 'totaal', label: 'Totaal', color: '#f4f1ea', defaultOn: true },
+  { key: 'springcast', label: 'Springcast', color: '#5b8def', defaultOn: true },
+  { key: 'youtube', label: 'YouTube', color: '#e2585a', defaultOn: true }
+];
+const YEAR_DASH = { 2026: 'none', 2025: '7,4', 2024: '2,3' };
+function metricValue(s, metricKey) {
+  if (metricKey === 'springcast') return s.downloads || 0;
+  if (metricKey === 'youtube') return s.youtube_views || 0;
+  return (s.downloads || 0) + (s.youtube_views || 0);
+}
+function refreshShowChart(showId) {
+  const stats = window.__showStatsCache[showId] || [];
+  const checkedYears = Array.from(document.querySelectorAll(`#yearToggle_${showId} input:checked`)).map(el => Number(el.dataset.year));
+  const checkedMetrics = Array.from(document.querySelectorAll(`#metricToggle_${showId} input:checked`)).map(el => el.dataset.metric);
+  const filtered = stats.filter(s => checkedYears.includes(s.year));
+  document.getElementById('showChartWrap_' + showId).innerHTML = renderShowChart(showId, filtered, window.__showAudioType[showId] || 'audio', checkedMetrics);
+}
+function formatAxisNumber(n) {
+  if (n >= 1000) { const k = n/1000; return (Math.round(k*10)/10).toString().replace(/\.0$/,'') + 'K'; }
+  return String(Math.round(n));
+}
+function renderChartAxes({ padL, padT, plotW, plotH, maxWeek, maxVal, xFor, yFor }) {
+  const yTickCount = 4;
+  const yTicks = [];
+  for (let i = 0; i <= yTickCount; i++) {
+    const val = (maxVal / yTickCount) * i;
+    const y = yFor(val);
+    yTicks.push(`
+      <line x1="${padL}" y1="${y}" x2="${padL+plotW}" y2="${y}" stroke="var(--border)" stroke-width="1" opacity="0.5"/>
+      <text x="${padL-6}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--text-faint)">${formatAxisNumber(val)}</text>
+    `);
+  }
+  const xTickStep = maxWeek <= 10 ? 1 : Math.ceil(maxWeek / 10);
+  const xTicks = [];
+  for (let w = 1; w <= maxWeek; w += xTickStep) {
+    xTicks.push(`<text x="${xFor(w)}" y="${padT+plotH+16}" text-anchor="middle" font-size="9" fill="var(--text-faint)">wk${w}</text>`);
+  }
+  return yTicks.join('') + xTicks.join('');
+}
+function renderShowChart(showId, stats, audioType, activeMetrics) {
+  activeMetrics = (activeMetrics && activeMetrics.length) ? activeMetrics : ['totaal'];
+  if (!stats.length) return '<div class="state-msg" style="padding:20px 0;">Nog geen cijfers voor de geselecteerde jaren.</div>';
+  const thresholds = audioType === 'audio_video' ? {orange:2500, green:6500} : {orange:1500, green:4500};
+  const width=640,height=220,padL=44,padR=16,padT=16,padB=28;
+  const plotW=width-padL-padR, plotH=height-padT-padB;
+  const byYear = {};
+  stats.forEach(s => { (byYear[s.year] = byYear[s.year]||[]).push(s); });
+  Object.values(byYear).forEach(arr => arr.sort((a,b)=>a.week_number-b.week_number));
+  const maxWeek = Math.max(...stats.map(s=>s.week_number), 1);
+  const maxVal = Math.max(thresholds.green*1.15, ...stats.flatMap(s => activeMetrics.map(m => metricValue(s,m))), 1);
+  const xFor = w => padL + ((w-1)/(Math.max(maxWeek-1,1)))*plotW;
+  const yFor = v => padT+plotH-(v/maxVal)*plotH;
+  window.__showChartGeom = window.__showChartGeom || {};
+  window.__showChartGeom[showId] = { byYear, xFor, yFor, width, height, activeMetrics };
+
+  const zones = `
+    <rect x="${padL}" y="${padT}" width="${plotW}" height="${Math.max(0,yFor(thresholds.green)-padT)}" fill="var(--green)" opacity="0.07"/>
+    <rect x="${padL}" y="${yFor(thresholds.green)}" width="${plotW}" height="${Math.max(0,yFor(thresholds.orange)-yFor(thresholds.green))}" fill="var(--orange)" opacity="0.07"/>
+    <rect x="${padL}" y="${yFor(thresholds.orange)}" width="${plotW}" height="${Math.max(0,padT+plotH-yFor(thresholds.orange))}" fill="var(--red)" opacity="0.07"/>`;
+  const dashedLines = `
+    <line x1="${padL}" y1="${yFor(thresholds.green)}" x2="${padL+plotW}" y2="${yFor(thresholds.green)}" stroke="var(--green)" stroke-dasharray="4,3" stroke-width="1"/>
+    <text x="${padL+plotW-2}" y="${yFor(thresholds.green)-4}" text-anchor="end" font-size="9" fill="var(--green)">groen</text>
+    <line x1="${padL}" y1="${yFor(thresholds.orange)}" x2="${padL+plotW}" y2="${yFor(thresholds.orange)}" stroke="var(--orange)" stroke-dasharray="4,3" stroke-width="1"/>
+    <text x="${padL+plotW-2}" y="${yFor(thresholds.orange)-4}" text-anchor="end" font-size="9" fill="var(--orange)">oranje</text>`;
+  const lines = Object.keys(byYear).sort().map(year => activeMetrics.map(metricKey => {
+    const metricDef = METRIC_DEFS.find(m => m.key === metricKey);
+    const arr = byYear[year];
+    const pts = arr.map(s => `${xFor(s.week_number)},${yFor(metricValue(s,metricKey))}`).join(' ');
+    const dash = YEAR_DASH[year] || 'none';
+    return `<polyline points="${pts}" fill="none" stroke="${metricDef.color}" stroke-width="2" ${dash!=='none'?`stroke-dasharray="${dash}"`:''}/>` + arr.map(s=>`<circle cx="${xFor(s.week_number)}" cy="${yFor(metricValue(s,metricKey))}" r="2.5" fill="${metricDef.color}"/>`).join('');
+  }).join('')).join('');
+  const metricLegend = activeMetrics.map(mk => { const d = METRIC_DEFS.find(m=>m.key===mk); return `<span><i style="background:${d.color}"></i>${d.label}</span>`; }).join('');
+  const yearsShown = Object.keys(byYear).sort();
+  const yearNote = yearsShown.length > 1 ? `<div class="hint" style="margin-top:4px;">Lijnstijl per jaar: ${yearsShown.map(y=>`${y} ${YEAR_DASH[y]==='none'?'(doorgetrokken)':(YEAR_DASH[y]==='7,4'?'(streep)':'(stip)')}`).join(', ')}</div>` : '';
+  const axes = renderChartAxes({ padL, padT, plotW, plotH, maxWeek, maxVal, xFor, yFor });
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" id="showChartSvg_${showId}" class="stats-chart-svg" onmousemove="handleShowChartHover(event,'${showId}')" onmouseleave="hideShowChartHover('${showId}')">
+      ${axes}${zones}${dashedLines}${lines}
+      <g id="showCrosshair_${showId}" style="display:none;"><line id="showCrossLine_${showId}" x1="0" y1="${padT}" x2="0" y2="${padT+plotH}" stroke="var(--text-faint)" stroke-width="1"/></g>
+    </svg>
+    <div class="chart-legend">${metricLegend}</div>
+    ${yearNote}
+    <div id="showChartTooltip_${showId}" class="chart-tooltip hidden"></div>
+  `;
+}
+function handleShowChartHover(evt, showId) {
+  const geom = window.__showChartGeom && window.__showChartGeom[showId];
+  if (!geom) return;
+  const svg = document.getElementById('showChartSvg_' + showId);
+  const rect = svg.getBoundingClientRect();
+  const scaleX = geom.width / rect.width;
+  const xInSvg = (evt.clientX - rect.left) * scaleX;
+  const allWeeks = [...new Set(Object.values(geom.byYear).flat().map(s=>s.week_number))].sort((a,b)=>a-b);
+  if (!allWeeks.length) return;
+  let nearestWeek = allWeeks[0], bestDist = Infinity;
+  allWeeks.forEach(w => { const d = Math.abs(geom.xFor(w) - xInSvg); if (d < bestDist) { bestDist = d; nearestWeek = w; } });
+  const cross = document.getElementById('showCrosshair_' + showId);
+  const line = document.getElementById('showCrossLine_' + showId);
+  if (!cross || !line) return;
+  cross.style.display = '';
+  line.setAttribute('x1', geom.xFor(nearestWeek)); line.setAttribute('x2', geom.xFor(nearestWeek));
+  const tooltip = document.getElementById('showChartTooltip_' + showId);
+  tooltip.classList.remove('hidden');
+  let html = `<b>week ${nearestWeek}</b>`;
+  Object.keys(geom.byYear).sort().forEach(year => {
+    const match = geom.byYear[year].find(s => s.week_number === nearestWeek);
+    if (!match) return;
+    html += `<br><b style="color:var(--text-faint)">${year}</b>`;
+    geom.activeMetrics.forEach(mk => {
+      const d = METRIC_DEFS.find(m=>m.key===mk);
+      html += `<br><span style="color:${d.color}">${d.label}</span>: ${metricValue(match, mk).toLocaleString('nl-NL')}`;
+    });
+  });
+  tooltip.innerHTML = html;
+  const svgRect = svg.getBoundingClientRect();
+  const px = (geom.xFor(nearestWeek)/geom.width)*svgRect.width;
+  tooltip.style.left = Math.min(px+10, svgRect.width-150) + 'px';
+  tooltip.style.top = '4px';
+}
+function hideShowChartHover(showId) {
+  const cross = document.getElementById('showCrosshair_'+showId); if (cross) cross.style.display='none';
+  const tooltip = document.getElementById('showChartTooltip_'+showId); if (tooltip) tooltip.classList.add('hidden');
+}
+async function addShowStatWeek(showId) {
+  if (!requireOwner()) return;
+  const year = Number(document.getElementById('showStatYear_'+showId).value.trim()) || 2026;
+  const weekVal = document.getElementById('showStatWeek_'+showId).value.trim();
+  const downloads = document.getElementById('showStatDownloads_'+showId).value;
+  const youtube = document.getElementById('showStatYoutube_'+showId).value;
+  if (!weekVal) { alert('Vul een weeknummer in.'); return; }
+  await sbInsert('show_stats', [{ id: uid('sstat'), show_id: showId, year, week_number: Number(weekVal)||0, week_label: 'week '+weekVal, downloads: downloads?Number(downloads):null, youtube_views: youtube?Number(youtube):null }]);
+  openShow(showId, true);
+}
+async function editShowStat(showId, statId) {
+  if (!requireOwner()) return;
+  const row = (await sbSelect('show_stats', 'id=eq.'+statId+'&select=*'))[0];
+  if (!row) return;
+  renderModal(`
+    <h2>Week aanpassen</h2>
+    <div class="field-row">
+      <div class="field"><label>Jaar</label><input type="text" id="esYear" value="${row.year}"></div>
+      <div class="field"><label>Weeklabel</label><input type="text" id="esWeekLabel" value="${escapeHtml(row.week_label||'')}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Springcast downloads</label><input type="text" id="esDownloads" value="${row.downloads ?? ''}"></div>
+      <div class="field"><label>YouTube views</label><input type="text" id="esYoutube" value="${row.youtube_views ?? ''}"></div>
+    </div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalSave').onclick = async () => {
+    const dl = document.getElementById('esDownloads').value.trim();
+    const yt = document.getElementById('esYoutube').value.trim();
+    await sbUpdate('show_stats', 'id=eq.'+statId, {
+      year: Number(document.getElementById('esYear').value) || row.year,
+      week_label: document.getElementById('esWeekLabel').value.trim(),
+      downloads: dl?Number(dl):null,
+      youtube_views: yt?Number(yt):null
+    });
+    closeModal(); openShow(showId, true);
+  };
+}
+async function deleteShowStat(showId, statId) {
+  if (!requireOwner()) return;
+  if (!confirm('Deze week verwijderen?')) return;
+  await sbDelete('show_stats', 'id=eq.'+statId);
+  openShow(showId, true);
+}
+function editShowAudioType(showId, current) {
+  if (!requireOwner()) return;
+  renderModal(`
+    <h2>Type podcast</h2>
+    <div class="field"><label>Voor de juiste benchmark-normen</label>
+      <div class="type-toggle" id="showAudioToggle">
+        <button type="button" data-val="audio" class="${current==='audio'?'active':''}">Alleen audio</button>
+        <button type="button" data-val="audio_video" class="${current==='audio_video'?'active':''}">Audio & video</button>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
+  `);
+  let selected = current;
+  document.getElementById('showAudioToggle').querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => { selected = btn.dataset.val; document.getElementById('showAudioToggle').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn)); };
+  });
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalSave').onclick = async () => {
+    await sbUpdate('live_shows', 'id=eq.'+showId, { audio_type: selected });
+    closeModal(); openShow(showId, true);
+  };
+}
+function closeShowDetail() {
+  document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('liveShowsView').classList.remove('hidden');
+  if (window.location.search.includes('show=')) history.pushState({view:'shows'}, '', window.location.pathname + '?view=shows');
+  loadLiveShows();
+}
+
+function shareShow(showId) {
+  if (!requireOwner()) return;
+  const url = window.location.origin + window.location.pathname + '?showshare=' + showId;
+  renderModal(`
+    <h2>Luistercijfers delen</h2>
+    <div class="hint">Deze link toont alleen de luistercijfers van deze podcast \u2014 geen to-do's, geen andere podcasts, alleen-lezen. Navigeren tussen jaren en filteren op Springcast/YouTube/Totaal kan wel.</div>
+    <div class="share-link-box">
+      <input type="text" id="shareLinkInput" value="${url}" readonly onclick="this.select()">
+      <button class="small primary" id="shareCopyBtn">Kopieer</button>
+    </div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Sluiten</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('shareLinkInput').select();
+  document.getElementById('shareCopyBtn').onclick = () => {
+    const input = document.getElementById('shareLinkInput');
+    input.select();
+    const btn = document.getElementById('shareCopyBtn');
+    const done = () => { btn.textContent = 'Gekopieerd!'; setTimeout(() => { btn.textContent = 'Kopieer'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(input.value).then(done, () => document.execCommand('copy') && done());
+    } else {
+      document.execCommand('copy'); done();
+    }
+  };
+}
+function shareProject(projectId) {
+  if (!requireOwner()) return;
+  const url = window.location.origin + window.location.pathname + '?share=' + projectId;
+  renderModal(`
+    <h2>Project delen</h2>
+    <div class="hint">Deze link opent alleen dit ene project \u2014 geen homepage, geen andere projecten, geen instellingen.</div>
+    <div class="share-link-box">
+      <input type="text" id="shareLinkInput" value="${url}" readonly onclick="this.select()">
+      <button class="small primary" id="shareCopyBtn">Kopieer</button>
+    </div>
+    <div class="hint" style="margin-top:10px;">Let op: dit is geen echte toegangsbeveiliging \u2014 iedereen met de link kan de gegevens van dit project lezen en bewerken.</div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Sluiten</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('shareLinkInput').select();
+  document.getElementById('shareCopyBtn').onclick = () => {
+    const input = document.getElementById('shareLinkInput');
+    input.select();
+    const btn = document.getElementById('shareCopyBtn');
+    const done = () => { btn.textContent = 'Gekopieerd!'; setTimeout(() => { btn.textContent = 'Kopieer'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(input.value).then(done, () => document.execCommand('copy') && done());
+    } else {
+      document.execCommand('copy'); done();
+    }
+  };
+}
+async function deleteProjectUI(projectId, name) {
+  if (!requireOwner()) return;
+  if (!confirm('Project "' + name + '" volledig verwijderen? Dit kan niet ongedaan gemaakt worden.')) return;
+  try { await sbDelete('projects', 'id=eq.' + projectId); loadHome(); }
+  catch (err) { alert('Verwijderen mislukt: ' + err.message); }
+}
+
+// ================= Ruler timeline (detail view) =================
+const tlState = {};
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth()+n); return x; }
+function addYears(d, n) { const x = new Date(d); x.setFullYear(x.getFullYear()+n); return x; }
+function startOfWeek(d) { const x = new Date(d); x.setHours(0,0,0,0); const day=(x.getDay()+6)%7; return addDays(x,-day); }
+function endOfMonth(d) { return new Date(d.getFullYear(), d.getMonth()+1, 0, 23,59,59); }
+function startOfYear(d) { return new Date(d.getFullYear(), 0, 1); }
+function endOfYear(d) { return new Date(d.getFullYear(), 11, 31, 23,59,59); }
+function computeRange(zoom, anchor) {
+  if (zoom === 'jaar') return { start: startOfYear(anchor), end: endOfYear(anchor), unit: 'month' };
+  if (zoom === 'maand') return { start: startOfMonth(anchor), end: endOfMonth(anchor), unit: 'day' };
+  if (zoom === 'week') { const s = startOfWeek(anchor); return { start: s, end: addDays(s,6), unit: 'day' }; }
+  const s = new Date(anchor); s.setHours(0,0,0,0); return { start: s, end: addDays(s,1), unit: 'hour' };
+}
+function rangeLabel(zoom, anchor) {
+  if (zoom === 'jaar') return String(anchor.getFullYear());
+  if (zoom === 'maand') return anchor.toLocaleDateString('nl-NL', {month:'long', year:'numeric'});
+  if (zoom === 'week') return 'week van ' + startOfWeek(anchor).toLocaleDateString('nl-NL', {day:'numeric',month:'short'});
+  return anchor.toLocaleDateString('nl-NL', {day:'numeric',month:'long',year:'numeric'});
+}
+function shiftAnchor(zoom, anchor, dir) {
+  if (zoom === 'jaar') return addYears(anchor, dir);
+  if (zoom === 'maand') return addMonths(anchor, dir);
+  if (zoom === 'week') return addDays(anchor, dir*7);
+  return addDays(anchor, dir);
+}
+function buildColumns(range) {
+  const cols = [];
+  if (range.unit === 'month') { let d = new Date(range.start); while (d <= range.end) { cols.push({label: d.toLocaleDateString('nl-NL',{month:'short'})}); d = addMonths(d,1); } }
+  else if (range.unit === 'day') { let d = new Date(range.start); while (d <= range.end) { cols.push({label: String(d.getDate())}); d = addDays(d,1); } }
+  else { for (let h=0; h<24; h+=3) cols.push({label: h+':00'}); }
+  return cols;
+}
+function pct(date, range) {
+  const total = range.end.getTime() - range.start.getTime();
+  return Math.max(0, Math.min(100, ((date.getTime() - range.start.getTime())/total)*100));
+}
+function renderTimeline(containerId, rows, opts) {
+  opts = opts || {};
+  if (!tlState[containerId]) tlState[containerId] = { zoom: 'maand', anchor: new Date() };
+  const st = tlState[containerId];
+  const range = computeRange(st.zoom, st.anchor);
+  const cols = buildColumns(range);
+  const today = new Date();
+  const showToday = today >= range.start && today <= range.end;
+  const todayPct = showToday ? pct(today, range) : null;
+  const zoomBtns = ['dag','week','maand','jaar'].map(z => `<button data-zoom="${z}" class="${z===st.zoom?'active':''}">${z[0].toUpperCase()+z.slice(1)}</button>`).join('');
+  const rowsHtml = rows.map(r => {
+    let barHtml = '<span class="tl-outside">geen datums</span>';
+    if (r.start && r.end) {
+      const intersects = r.end >= range.start && r.start <= range.end;
+      if (intersects) {
+        const left = pct(r.start < range.start ? range.start : r.start, range);
+        const right = pct(r.end > range.end ? range.end : r.end, range);
+        const width = Math.max(1.2, right - left);
+        barHtml = `<div class="tl-bar" style="left:${left}%;width:${width}%;background:${r.color}" title="${escapeHtml(r.label)}: ${r.start.toLocaleDateString('nl-NL')} \u2192 ${r.end.toLocaleDateString('nl-NL')}"><span class="tl-bar-label">${escapeHtml(r.sublabel||'')}</span></div>`;
+        (r.markers||[]).forEach(m => { if (m.date >= range.start && m.date <= range.end) barHtml += `<div class="tl-marker" style="left:${pct(m.date,range)}%;background:${m.color||'#fff'}" title="${escapeHtml(m.label)}"></div>`; });
+      } else {
+        barHtml = `<span class="tl-outside">${r.end < range.start ? '\u2190 eerder' : '\u2192 later'} \u00b7 t/m ${r.end.toLocaleDateString('nl-NL')}</span>`;
+      }
+    }
+    return `<div class="tl-row"><div class="tl-row-label" ${r.onClickId ? `onclick="openProject('${r.onClickId}')" style="cursor:pointer"` : ''}><div class="tl-proj-name"><span class="tl-color-dot" style="background:${r.color}"></span>${escapeHtml(r.label)}</div></div><div class="tl-row-track">${barHtml}</div></div>`;
+  }).join('');
+  const html = `
+    <div class="tl-controls">
+      <div class="tl-zoom">${zoomBtns}</div>
+      <div class="tl-nav"><button class="icon" data-nav="-1">\u2190</button><span class="tl-label">${rangeLabel(st.zoom, st.anchor)}</span><button class="icon" data-nav="1">\u2192</button><button class="small" data-nav="today">Vandaag</button></div>
+    </div>
+    <div class="timeline">
+      <div class="tl-header"><div class="tl-header-spacer"></div><div class="tl-header-cols">${cols.map(c=>`<div class="tl-col-label">${c.label}</div>`).join('')}</div></div>
+      <div class="tl-body">${showToday ? `<div class="tl-today" style="left:calc(140px + (100% - 140px) * ${todayPct}/100)"></div>` : ''}${rowsHtml || '<div class="state-msg">Geen data.</div>'}</div>
+    </div>
+  `;
+  const container = document.getElementById(containerId);
+  container.innerHTML = html;
+  container.querySelectorAll('[data-zoom]').forEach(btn => { btn.onclick = () => { st.zoom = btn.dataset.zoom; renderTimeline(containerId, rows, opts); }; });
+  container.querySelectorAll('[data-nav]').forEach(btn => {
+    btn.onclick = () => { if (btn.dataset.nav === 'today') st.anchor = new Date(); else st.anchor = shiftAnchor(st.zoom, st.anchor, Number(btn.dataset.nav)); renderTimeline(containerId, rows, opts); };
+  });
+}
+
+// ================= Home view =================
+async function loadHome() {
+  const calWrap = document.getElementById('homeCalWrap');
+  const listWrap = document.getElementById('homeListWrap');
+  const sidebar = document.getElementById('homeSidebar');
+  calWrap.innerHTML = '<div class="state-msg">Laden\u2026</div>'; listWrap.innerHTML = ''; sidebar.innerHTML = '';
+  try {
+    const projects = await sbSelect('projects', 'select=*&is_show_project=is.false&order=launch_date.asc.nullslast');
+    calWrap.innerHTML = '<div id="homeCal"></div>';
+    renderHomeCalendar('homeCal', projects);
+    renderProjectList('homeListWrap', projects);
+    if (!projects.length) calWrap.innerHTML += '<div class="state-msg">Nog geen projecten. Klik op "+ Nieuw project" om te starten.</div>';
+    loadSidebarTodos(projects);
+    loadPersonalTodos();
+  } catch (e) {
+    calWrap.innerHTML = `<div class="state-msg">Kon projecten niet laden (${escapeHtml(e.message)}).<br><button class="small" onclick="loadHome()">Opnieuw proberen</button></div>`;
+  }
+}
+async function loadSidebarTodos(projects) {
+  const sidebar = document.getElementById('homeSidebar');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const startedProjects = projects.filter(p => p.start_date && new Date(p.start_date) <= today);
+  if (!startedProjects.length) { sidebar.innerHTML = '<h3>Openstaande taken</h3><div class="state-msg" style="padding:20px;">Niets openstaand.</div>'; return; }
+  try {
+    const projectMap = {}; startedProjects.forEach(p => projectMap[p.id] = p);
+    const steps = await sbSelect('project_steps', 'status=neq.done&select=id,project_id,track,step_name,priority,order_num&order=order_num.asc');
+    const relevant = steps.filter(s => projectMap[s.project_id]);
+
+    // track-focus ranking: productie t/m Logo design (order<=5) > distributie > rest van productie > marketing
+    const trackRank = (s) => {
+      if (s.track === 'productie') return s.order_num <= 5 ? 0 : 2;
+      if (s.track === 'distributie') return 1;
+      if (s.track === 'marketing') return 3;
+      return 1.5;
+    };
+
+    // top (most relevant open) task per started project
+    const topPerProject = {};
+    relevant.forEach(s => {
+      const current = topPerProject[s.project_id];
+      if (!current || trackRank(s) < trackRank(current) || (trackRank(s) === trackRank(current) && s.order_num < current.order_num)) {
+        topPerProject[s.project_id] = s;
+      }
+    });
+    const topTasks = Object.values(topPerProject);
+
+    // any explicitly flagged tasks (across started projects, regardless of "top" status)
+    const flagged = relevant.filter(s => s.priority);
+
+    const launchTime = (projectId) => {
+      const p = projectMap[projectId];
+      return (p && p.launch_date) ? new Date(p.launch_date).getTime() : Infinity;
+    };
+    const prioRank = { rood: 0, oranje: 1, groen: 2 };
+    const seen = new Set();
+    const merged = [];
+    flagged.slice()
+      .sort((a,b) => (prioRank[a.priority]??3) - (prioRank[b.priority]??3) || launchTime(a.project_id) - launchTime(b.project_id))
+      .forEach(s => { if (!seen.has(s.id)) { seen.add(s.id); merged.push(s); } });
+    topTasks.slice()
+      .sort((a,b) => launchTime(a.project_id) - launchTime(b.project_id))
+      .forEach(s => { if (!seen.has(s.id)) { seen.add(s.id); merged.push(s); } });
+
+    if (!merged.length) { sidebar.innerHTML = '<h3>Openstaande taken</h3><div class="state-msg" style="padding:20px;">Niets openstaand.</div>'; return; }
+    sidebar.innerHTML = `<h3>Openstaande taken</h3>${merged.map(s => {
+      const proj = projectMap[s.project_id];
+      return `<div class="sidebar-todo" onclick="openProject('${s.project_id}')">
+        <span class="sidebar-prio ${s.priority||'none'}"></span>
+        <div class="sidebar-todo-text">${escapeHtml(s.step_name)}<div class="sidebar-todo-proj" style="color:${proj.color}">${escapeHtml(proj.name)}</div></div>
+      </div>`;
+    }).join('')}`;
+  } catch (e) {
+    sidebar.innerHTML = `<h3>Openstaande taken</h3><div class="state-msg">Kon niet laden.</div>`;
+  }
+}
+function goHome() { closeProject(); }
+
+// ================= Personal to-do list (unrelated to podcast projects) =================
+async function loadPersonalTodos() {
+  const wrap = document.getElementById('personalTodosWrap');
+  wrap.innerHTML = '<div class="home-sidebar"><div class="state-msg">Laden\u2026</div></div>';
+  try {
+    const todos = await sbSelect('personal_todos', 'select=*&order=order_num.asc');
+    wrap.innerHTML = `
+      <div class="home-sidebar personal-todos-panel">
+        <h3>Eigen to-do's</h3>
+        <div class="step-list" id="personalTodoList">
+          ${todos.map(t => personalTodoHtml(t)).join('')}
+        </div>
+        <div class="add-step-row">
+          <input type="text" id="newPersonalTodo" placeholder="+ to-do toevoegen" onkeydown="if(event.key==='Enter') addPersonalTodo()">
+          <button class="small primary" onclick="addPersonalTodo()">+</button>
+        </div>
+      </div>
+    `;
+    setupPersonalDragDrop(document.getElementById('personalTodoList'));
+  } catch (e) {
+    wrap.innerHTML = `<div class="home-sidebar"><div class="state-msg">Kon eigen to-do's niet laden.</div></div>`;
+  }
+}
+function personalTodoHtml(t) {
+  const subtasks = Array.isArray(t.subtasks) ? t.subtasks : [];
+  const hasNote = !!(t.note && t.note.trim());
+  const prio = t.priority || '';
+  return `
+    <div class="step active" draggable="true" data-step-id="${t.id}">
+      <div class="step-check" onclick="completePersonalTodo('${t.id}')"></div>
+      <div class="step-main">
+        <div class="step-name" id="ptname_${t.id}">${escapeHtml(t.text)}</div>
+        <div id="ptnotewrap_${t.id}">${hasNote ? `<div class="step-note-text" onclick="startEditPTNote('${t.id}')">${escapeHtml(t.note)}</div>` : ''}</div>
+        <div id="ptsubtasks_${t.id}">${subtasks.length ? ptSubtaskListHtml(t.id, subtasks) : ''}</div>
+      </div>
+      <button class="prio-flag prio-${prio||'none'}" title="Prioriteit instellen" onclick="cyclePTPriority('${t.id}','${prio}')">\u2691</button>
+      <div class="step-actions">
+        <button title="Subtaak toevoegen" onclick="showPTSubtaskInput('${t.id}')">+</button>
+        <button class="${hasNote?'has-note':''}" title="Notitie" onclick="startEditPTNote('${t.id}')">\u{1F4DD}</button>
+        <button title="Naam aanpassen" onclick="startRenamePT('${t.id}')">\u270e</button>
+        <button title="Verwijderen" onclick="deletePersonalTodo('${t.id}')">\u00d7</button>
+      </div>
+    </div>
+  `;
+}
+async function addPersonalTodo() {
+  if (!requireOwner()) return;
+  const input = document.getElementById('newPersonalTodo');
+  const text = input.value.trim(); if (!text) return;
+  const rows = await sbSelect('personal_todos', 'select=order_num&order=order_num.desc&limit=1');
+  const maxOrder = rows.length ? rows[0].order_num : 0;
+  const newRows = await sbInsert('personal_todos', [{ id: uid('pt'), text, order_num: maxOrder+1, subtasks: [] }]);
+  document.getElementById('personalTodoList').insertAdjacentHTML('beforeend', personalTodoHtml(newRows[0]));
+  input.value = ''; input.focus();
+}
+async function completePersonalTodo(id) {
+  if (!requireOwner()) return;
+  const el = document.querySelector(`#personalTodoList [data-step-id="${id}"]`);
+  if (el) { el.classList.add('fading'); setTimeout(() => el.remove(), 220); }
+  try { await sbDelete('personal_todos', 'id=eq.' + id); }
+  catch (err) { alert('Kon to-do niet afronden: ' + err.message); loadPersonalTodos(); }
+}
+async function deletePersonalTodo(id) {
+  if (!requireOwner()) return;
+  if (!confirm('Deze to-do verwijderen?')) return;
+  const el = document.querySelector(`#personalTodoList [data-step-id="${id}"]`);
+  if (el) el.remove();
+  await sbDelete('personal_todos', 'id=eq.' + id);
+}
+function startRenamePT(id) {
+  if (!requireOwner()) return;
+  const el = document.getElementById('ptname_' + id);
+  el.contentEditable = 'true'; el.focus(); document.execCommand('selectAll', false, null);
+  const finish = async () => { el.contentEditable = 'false'; const n = el.textContent.trim(); if (n) await sbUpdate('personal_todos', 'id=eq.' + id, { text: n }); };
+  el.onblur = finish;
+  el.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } };
+}
+function startEditPTNote(id) {
+  if (!requireOwner()) return;
+  const wrap = document.getElementById('ptnotewrap_' + id);
+  const current = wrap.querySelector('.step-note-text');
+  const existingText = current ? current.textContent : '';
+  wrap.innerHTML = `<textarea class="step-note-input" id="ptnoteinput_${id}" rows="2" placeholder="Notitie...">${escapeHtml(existingText)}</textarea>`;
+  const ta = document.getElementById('ptnoteinput_' + id);
+  ta.focus();
+  ta.onblur = async () => {
+    const note = ta.value.trim();
+    await sbUpdate('personal_todos', 'id=eq.' + id, { note });
+    wrap.innerHTML = note ? `<div class="step-note-text" onclick="startEditPTNote('${id}')">${escapeHtml(note)}</div>` : '';
+  };
+}
+async function cyclePTPriority(id, current) {
+  if (!requireOwner()) return;
+  const order = ['', 'rood', 'oranje', 'groen'];
+  const next = order[(order.indexOf(current) + 1) % order.length];
+  await sbUpdate('personal_todos', 'id=eq.' + id, { priority: next || null });
+  loadPersonalTodos();
+}
+function ptSubtaskListHtml(todoId, subtasks) {
+  return `<div class="subtask-list">${subtasks.map(st => `
+    <div class="subtask ${st.done?'done':''}" data-sub-id="${st.id}">
+      <div class="subtask-check" onclick="togglePTSubtask('${todoId}','${st.id}')">${st.done?'\u2713':''}</div>
+      <span class="subtask-text" onclick="togglePTSubtask('${todoId}','${st.id}')">${escapeHtml(st.text)}</span>
+      <button class="subtask-del" onclick="deletePTSubtask('${todoId}','${st.id}')">\u00d7</button>
+    </div>
+  `).join('')}</div>`;
+}
+function showPTSubtaskInput(todoId) {
+  if (!requireOwner()) return;
+  const wrap = document.getElementById('ptsubtasks_' + todoId);
+  if (document.getElementById('ptsubtaskadd_' + todoId)) { document.getElementById('ptsubtaskadd_' + todoId).focus(); return; }
+  wrap.insertAdjacentHTML('beforeend', `<div class="subtask-add-row"><input type="text" placeholder="+ subtaak" id="ptsubtaskadd_${todoId}" onkeydown="if(event.key==='Enter') addPTSubtask('${todoId}')"><button class="small" onclick="addPTSubtask('${todoId}')">+</button></div>`);
+  document.getElementById('ptsubtaskadd_' + todoId).focus();
+}
+async function getPTSubtasks(todoId) {
+  const row = (await sbSelect('personal_todos', 'id=eq.' + todoId + '&select=subtasks'))[0];
+  return (row && Array.isArray(row.subtasks)) ? row.subtasks : [];
+}
+async function addPTSubtask(todoId) {
+  if (!requireOwner()) return;
+  const input = document.getElementById('ptsubtaskadd_' + todoId);
+  const text = input.value.trim(); if (!text) return;
+  const newSub = { id: uid('sub'), text, done: false };
+  const wrap = document.getElementById('ptsubtasks_' + todoId);
+  const addRow = input.closest('.subtask-add-row');
+  let list = wrap.querySelector('.subtask-list');
+  if (!list) { wrap.insertAdjacentHTML('afterbegin', '<div class="subtask-list"></div>'); list = wrap.querySelector('.subtask-list'); }
+  list.insertAdjacentHTML('beforeend', `<div class="subtask" data-sub-id="${newSub.id}"><div class="subtask-check" onclick="togglePTSubtask('${todoId}','${newSub.id}')"></div><span class="subtask-text" onclick="togglePTSubtask('${todoId}','${newSub.id}')">${escapeHtml(text)}</span><button class="subtask-del" onclick="deletePTSubtask('${todoId}','${newSub.id}')">\u00d7</button></div>`);
+  if (addRow) addRow.remove();
+  const subtasks = await getPTSubtasks(todoId);
+  subtasks.push(newSub);
+  await sbUpdate('personal_todos', 'id=eq.' + todoId, { subtasks });
+}
+async function togglePTSubtask(todoId, subId) {
+  if (!requireOwner()) return;
+  const el = document.querySelector(`#ptsubtasks_${todoId} .subtask[data-sub-id="${subId}"]`);
+  let willBeDone = true;
+  if (el) { willBeDone = !el.classList.contains('done'); el.classList.toggle('done', willBeDone); el.querySelector('.subtask-check').textContent = willBeDone?'\u2713':''; }
+  const subtasks = await getPTSubtasks(todoId);
+  const st = subtasks.find(s => s.id === subId); if (st) st.done = willBeDone;
+  await sbUpdate('personal_todos', 'id=eq.' + todoId, { subtasks });
+}
+async function deletePTSubtask(todoId, subId) {
+  if (!requireOwner()) return;
+  const el = document.querySelector(`#ptsubtasks_${todoId} .subtask[data-sub-id="${subId}"]`);
+  if (el) el.remove();
+  const subtasks = (await getPTSubtasks(todoId)).filter(s => s.id !== subId);
+  await sbUpdate('personal_todos', 'id=eq.' + todoId, { subtasks });
+}
+function setupPersonalDragDrop(listEl) {
+  if (!listEl || listEl.__dragWired) return;
+  listEl.__dragWired = true;
+  let draggedId = null;
+  listEl.addEventListener('dragstart', e => { if (!isOwner) { e.preventDefault(); return; } const el = e.target.closest('.step'); if (!el) return; draggedId = el.dataset.stepId; el.classList.add('dragging'); });
+  listEl.addEventListener('dragend', e => { const el = e.target.closest('.step'); if (el) el.classList.remove('dragging'); listEl.querySelectorAll('.step').forEach(s=>s.classList.remove('drag-over')); });
+  listEl.addEventListener('dragover', e => { const el = e.target.closest('.step'); if (!el) return; e.preventDefault(); el.classList.add('drag-over'); });
+  listEl.addEventListener('dragleave', e => { const el = e.target.closest('.step'); if (el) el.classList.remove('drag-over'); });
+  listEl.addEventListener('drop', async e => {
+    const el = e.target.closest('.step'); if (!el) return;
+    e.preventDefault(); el.classList.remove('drag-over');
+    const targetId = el.dataset.stepId;
+    if (!draggedId || draggedId === targetId) return;
+    const items = Array.from(listEl.querySelectorAll('.step'));
+    const draggedEl = items.find(i => i.dataset.stepId === draggedId);
+    if (!draggedEl) return;
+    const targetIdx = items.indexOf(el);
+    listEl.insertBefore(draggedEl, items.indexOf(draggedEl) < targetIdx ? el.nextSibling : el);
+    const orderedIds = Array.from(listEl.querySelectorAll('.step')).map(s => s.dataset.stepId);
+    for (let i=0;i<orderedIds.length;i++) { await sbUpdate('personal_todos', 'id=eq.'+orderedIds[i], {order_num: i+1}); }
+  });
+}
+async function saveConcept(projectId) {
+  if (!requireOwner()) return;
+  const textarea = document.getElementById('conceptInput_' + projectId);
+  if (!textarea) return;
+  try { await sbUpdate('projects', 'id=eq.' + projectId, { concept: textarea.value }); }
+  catch (err) { alert('Opslaan mislukt: ' + err.message); }
+}
+
+// ================= Meeting recording & task extraction =================
+const STATUS_LABELS_MN = { recorded: 'Nog te verwerken', transcribing: 'Bezig met verwerken\u2026', ready: 'Klaar om te bekijken', applied: 'Taken toegevoegd' };
+function meetingNotesListHtml(projectId, notes) {
+  if (!notes || !notes.length) return '<div class="state-msg" style="padding:14px 0;">Nog geen meetings opgenomen. Gebruik de REC-knop rechtsboven.</div>';
+  return `<div class="meeting-list">${notes.map(n => `
+    <div class="meeting-card" onclick="showMeetingSummaryModal('${n.id}')">
+      <div class="meeting-card-date">${fmtDate(n.created_at)}</div>
+      <div class="meeting-card-main">
+        <span class="meeting-card-title">${escapeHtml(n.title || 'Meeting')}</span>
+        <span class="meeting-card-status">${STATUS_LABELS_MN[n.status] || n.status}</span>
+      </div>
+      <div class="meeting-card-actions">
+        ${n.status === 'recorded' ? `<button class="small primary" onclick="event.stopPropagation(); processMeeting('${n.id}','${projectId}')">Verwerken</button>` : ''}
+        ${n.status === 'transcribing' ? `<button class="small" disabled onclick="event.stopPropagation()">Bezig\u2026</button>` : ''}
+        ${(n.status === 'ready' || n.status === 'applied') ? `<button class="small" onclick="event.stopPropagation(); showTaskReviewModal('${n.id}','${projectId}')">Taken</button>` : ''}
+        <span class="meeting-card-chevron">\u25BE</span>
+        <button class="ghost small" onclick="event.stopPropagation(); deleteMeetingNote('${n.id}','${projectId}')">\u00d7</button>
+      </div>
+    </div>
+  `).join('')}</div>`;
+}
+async function showMeetingSummaryModal(noteId) {
+  const n = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0];
+  const tasks = Array.isArray(n.proposed_tasks) ? n.proposed_tasks : [];
+  renderModal(`
+    <h2>${escapeHtml(n.title || 'Meeting')}</h2>
+    <div class="hint">${fmtDate(n.created_at)}</div>
+    ${n.summary
+      ? `<h3 class="meeting-modal-subhead">Besproken</h3><div class="meeting-summary-text">${escapeHtml(n.summary)}</div>`
+      : `<div class="state-msg" style="padding:10px 0;">${n.status === 'recorded' ? 'Nog niet verwerkt \u2014 klik op "Verwerken" in de lijst.' : 'Nog geen samenvatting.'}</div>`}
+    ${tasks.length ? `<h3 class="meeting-modal-subhead">Actiepunten</h3><ul class="meeting-actionpoints">${tasks.map(t => `<li>${escapeHtml(t.text)}</li>`).join('')}</ul>` : ''}
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Sluiten</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+}
+function switchDetailTab(projectId, tabName) {
+  ['overzicht', 'meetings'].forEach(t => {
+    document.getElementById('tabContent_' + t + '_' + projectId).classList.toggle('hidden', t !== tabName);
+    document.getElementById('tabBtn_' + t + '_' + projectId).classList.toggle('active', t === tabName);
+  });
+}
+
+let __mediaRecorder = null;
+let __recordedChunks = [];
+let __recordingSeconds = 0;
+let __recordingTimer = null;
+
+function recButtonHtml(btnId, opts) {
+  const attrs = opts.projectId ? `data-project-id="${opts.projectId}"` : `data-show-id="${opts.showId}"`;
+  return `
+    <div class="rec-btn-wrap">
+      <span class="rec-timer-label hidden" id="${btnId}_timer">00:00</span>
+      <button class="rec-btn" id="${btnId}" ${attrs} onclick="handleRecClick('${btnId}')">
+        <span class="rec-btn-label">REC</span>
+        <div class="rec-waveform hidden" id="${btnId}_wave"><span></span><span></span><span></span><span></span></div>
+      </button>
+    </div>
+  `;
+}
+async function handleRecClick(btnId) {
+  if (!requireOwner()) return;
+  const btn = document.getElementById(btnId);
+  if (__mediaRecorder && __mediaRecorder.state === 'recording') {
+    __mediaRecorder.stop();
+    return;
+  }
+  let projectId = btn.dataset.projectId;
+  if (!projectId && btn.dataset.showId) {
+    projectId = await ensureLinkedProject(btn.dataset.showId);
+    btn.dataset.projectId = projectId;
+  }
+  if (!projectId) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    __recordedChunks = [];
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+    __mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    __mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) __recordedChunks.push(e.data); };
+    __mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(__recordingTimer); __recordingTimer = null;
+      setRecButtonState(btnId, false);
+      const blob = new Blob(__recordedChunks, { type: __mediaRecorder.mimeType || 'audio/webm' });
+      __mediaRecorder = null;
+      await saveRecording(projectId, blob);
+    };
+    __mediaRecorder.start();
+    __recordingSeconds = 0;
+    setRecButtonState(btnId, true);
+    updateRecBtnTimer(btnId);
+    __recordingTimer = setInterval(() => { __recordingSeconds++; updateRecBtnTimer(btnId); }, 1000);
+  } catch (err) {
+    alert('Kon microfoon niet gebruiken: ' + err.message);
+  }
+}
+function setRecButtonState(btnId, recording) {
+  const btn = document.getElementById(btnId);
+  const wave = document.getElementById(btnId + '_wave');
+  const label = btn ? btn.querySelector('.rec-btn-label') : null;
+  const timer = document.getElementById(btnId + '_timer');
+  if (!btn) return;
+  btn.classList.toggle('recording', recording);
+  if (wave) wave.classList.toggle('hidden', !recording);
+  if (label) label.classList.toggle('hidden', recording);
+  if (timer) timer.classList.toggle('hidden', !recording);
+}
+function updateRecBtnTimer(btnId) {
+  const timer = document.getElementById(btnId + '_timer');
+  if (!timer) return;
+  const m = String(Math.floor(__recordingSeconds/60)).padStart(2,'0');
+  const s = String(__recordingSeconds%60).padStart(2,'0');
+  timer.textContent = m + ':' + s;
+}
+async function saveRecording(projectId, blob) {
+  try {
+    const { url: SB_URL, key: SB_KEY } = getConfig();
+    const authToken = await getAuthToken();
+    const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
+    const filename = projectId + '_' + Date.now() + '.' + ext;
+    const uploadRes = await fetch(`${SB_URL}/storage/v1/object/meeting-audio/${filename}`, {
+      method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken, 'Content-Type': blob.type }, body: blob
+    });
+    if (!uploadRes.ok) throw new Error('Upload mislukt (' + uploadRes.status + ')');
+    const noteId = uid('meet');
+    await sbInsert('meeting_notes', [{ id: noteId, project_id: projectId, title: 'Meeting ' + fmtDate(new Date().toISOString()), audio_path: filename, status: 'recorded' }]);
+    const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
+    const listEl = document.getElementById('meetingList_' + projectId);
+    if (listEl) listEl.innerHTML = meetingNotesListHtml(projectId, notes);
+    const tabBtn = document.getElementById('tabBtn_meetings_' + projectId);
+    if (tabBtn) tabBtn.textContent = 'Meetings (' + notes.length + ')';
+  } catch (err) {
+    alert('Kon opname niet opslaan: ' + err.message);
+  }
+}
+async function deleteMeetingNote(noteId, projectId) {
+  if (!requireOwner()) return;
+  if (!confirm('Deze meeting-opname verwijderen?')) return;
+  try {
+    const row = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=audio_path'))[0];
+    await sbDelete('meeting_notes', 'id=eq.' + noteId);
+    if (row && row.audio_path) {
+      const { url: SB_URL, key: SB_KEY } = getConfig();
+      const authToken = await getAuthToken();
+      await fetch(`${SB_URL}/storage/v1/object/meeting-audio/${row.audio_path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{});
+    }
+    const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
+    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes);
+  } catch (err) {
+    alert('Kon opname niet verwijderen: ' + err.message);
+  }
+}
+
+// ---- Verwerken: transcriptie (Whisper) + taakvoorstellen (Claude), via serverless functies ----
+async function processMeeting(noteId, projectId) {
+  if (!requireOwner()) return;
+  try {
+    await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'transcribing' });
+    const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
+    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes);
+
+    const note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0];
+    const { url: SB_URL, key: SB_KEY } = getConfig();
+    const audioUrl = `${SB_URL}/storage/v1/object/public/meeting-audio/${note.audio_path}`;
+
+    const transcribeRes = await fetch('/.netlify/functions/transcribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioUrl, language: 'nl' })
+    });
+    if (!transcribeRes.ok) throw new Error('Transcriptie-functie nog niet beschikbaar (status ' + transcribeRes.status + '). Is de serverless functie al gedeployed?');
+    const { transcript } = await transcribeRes.json();
+
+    const projectsList = await sbSelect('projects', 'select=id,name,type');
+    const tasksRes = await fetch('/.netlify/functions/extract-tasks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript, projects: projectsList, currentProjectId: projectId })
+    });
+    if (!tasksRes.ok) throw new Error('Taak-extractie-functie nog niet beschikbaar (status ' + tasksRes.status + ').');
+    const { tasks, summary } = await tasksRes.json();
+
+    await sbUpdate('meeting_notes', 'id=eq.' + noteId, { transcript, proposed_tasks: tasks, summary: summary || null, status: 'ready' });
+    const notes2 = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
+    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes2);
+    showTaskReviewModal(noteId, projectId);
+  } catch (err) {
+    await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'recorded' });
+    const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
+    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes);
+    alert('Verwerken mislukt: ' + err.message);
+  }
+}
+
+async function showTaskReviewModal(noteId, projectId) {
+  const note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0];
+  const tasks = Array.isArray(note.proposed_tasks) ? note.proposed_tasks : [];
+  const allProjects = await sbSelect('projects', 'select=id,name,type&order=name.asc');
+  renderModal(`
+    <h2>Voorgestelde taken</h2>
+    <div class="hint">Vink aan wat je wil toevoegen, pas zo nodig de tekst, het project of het spoor aan.</div>
+    <div id="taskReviewList" class="task-review-list">
+      ${tasks.map((t, i) => `
+        <div class="task-review-row">
+          <input type="checkbox" id="taskSel_${i}" ${t.selected !== false ? 'checked' : ''}>
+          <input type="text" class="task-review-text" id="taskText_${i}" value="${escapeHtml(t.text || '')}">
+          <select id="taskProject_${i}">
+            ${allProjects.map(pr => `<option value="${pr.id}" ${pr.id === (t.project_id || projectId) ? 'selected' : ''}>${escapeHtml(pr.name)}</option>`).join('')}
+          </select>
+          <select id="taskTrack_${i}">
+            ${['productie','marketing','distributie','algemeen','taken'].map(tr => `<option value="${tr}" ${tr === (t.track || 'algemeen') ? 'selected' : ''}>${tr}</option>`).join('')}
+          </select>
+        </div>
+      `).join('') || '<div class="state-msg">Geen taken gevonden in dit transcript.</div>'}
+    </div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Sluiten</button><button class="primary" id="modalApply">Geselecteerde taken toevoegen</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalApply').onclick = async () => {
+    const btn = document.getElementById('modalApply');
+    btn.disabled = true; btn.textContent = 'Bezig\u2026';
+    let added = 0;
+    for (let i = 0; i < tasks.length; i++) {
+      const sel = document.getElementById('taskSel_' + i);
+      if (!sel || !sel.checked) continue;
+      const text = document.getElementById('taskText_' + i).value.trim();
+      const targetProject = document.getElementById('taskProject_' + i).value;
+      const track = document.getElementById('taskTrack_' + i).value;
+      if (!text) continue;
+      await addStep(targetProject, track, text, true);
+      added++;
+    }
+    await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'applied' });
+    closeModal();
+    alert(added + ' taak/taken toegevoegd.');
+    openProject(projectId, true);
+  };
+}
+
+// ================= Detail view =================
+function trackRangeForProject(p, track, steps) {
+  const dued = steps.filter(s => s.due_date).map(s => new Date(s.due_date));
+  if (track === 'productie' || track === 'taken') {
+    const start = p.start_date ? new Date(p.start_date) : null;
+    const end = dued.length ? new Date(Math.min(...dued.map(d=>d.getTime()))) : (p.launch_date ? new Date(p.launch_date) : null);
+    return { start, end: end || start };
+  }
+  const explicitStart = track === 'marketing' ? p.marketing_start_date : p.distributie_start_date;
+  const start = explicitStart ? new Date(explicitStart) : (dued.length ? new Date(Math.min(...dued.map(d=>d.getTime()))) : null);
+  const end = p.launch_date ? new Date(p.launch_date) : (dued.length ? new Date(Math.max(...dued.map(d=>d.getTime()))) : null);
+  return { start, end };
+}
+
+async function openProject(projectId, isShared, fromHistory) {
+  if (!isShared && !fromHistory) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('project') !== projectId) {
+      history.pushState({ view: 'project', id: projectId }, '', window.location.pathname + '?project=' + encodeURIComponent(projectId));
+    }
+  }
+  document.getElementById('homeView').classList.add('hidden');
+  document.getElementById('liveShowsView').classList.add('hidden');
+  document.getElementById('showDetailView').classList.add('hidden');
+  const detail = document.getElementById('detailView');
+  detail.classList.remove('hidden');
+  detail.innerHTML = '<div class="state-msg">Laden\u2026</div>';
+  let p, steps, benchmarks, stats, meetingNotes;
+  try {
+    [p, steps, benchmarks, stats, meetingNotes] = await Promise.all([
+      sbSelect('projects', 'id=eq.' + projectId + '&select=*').then(r => r[0]),
+      sbSelect('project_steps', 'project_id=eq.' + projectId + '&select=*&order=order_num.asc'),
+      sbSelect('benchmark_checks', 'project_id=eq.' + projectId + '&select=*&order=week_number.asc'),
+      sbSelect('podcast_stats', 'project_id=eq.' + projectId + '&select=*&order=week_number.asc'),
+      sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc')
+    ]);
+  } catch (e) {
+    detail.innerHTML = `<div class="state-msg">Kon project niet laden (${escapeHtml(e.message)}).<br><button class="small" onclick="openProject('${projectId}', ${!!isShared})">Opnieuw proberen</button></div>`;
+    return;
+  }
+  if (!p) { detail.innerHTML = '<div class="state-msg">Project niet gevonden.</div>'; return; }
+  const isOverig = p.type === 'overig';
+  const tracks = {
+    productie: steps.filter(s=>s.track==='productie'),
+    marketing: steps.filter(s=>s.track==='marketing'),
+    distributie: steps.filter(s=>s.track==='distributie'),
+    algemeen: steps.filter(s=>s.track==='algemeen'),
+    taken: steps.filter(s=>s.track==='taken')
+  };
+
+  const isTrackUnlocked = (track) => true;
+
+  const trackHtml = (track, trackSteps, algemeenSteps) => {
+    const splitMeeting = (track === 'productie' || track === 'marketing');
+    const regularSteps = splitMeeting ? trackSteps.filter(s => !s.from_meeting) : trackSteps;
+    const meetingSteps = splitMeeting ? trackSteps.filter(s => s.from_meeting) : [];
+    return `
+    <div class="track-col">
+      <div class="track-head">
+        <div class="track-head-left"><span class="dot" style="background:${TRACK_COLORS[track]}"></span>${TRACK_LABELS[track]}</div>
+        ${(track==='marketing'||track==='distributie') ? `<button class="track-start-edit" onclick="promptTrackStartDate('${projectId}','${track}','${track==='marketing'?(p.marketing_start_date||''):(p.distributie_start_date||'')}')">start \u270e</button>` : ''}
+      </div>
+      <div class="step-list" id="steplist_${track}" data-track="${track}" data-project="${projectId}">
+        ${sortForDisplay(regularSteps).map(s => stepHtml(projectId, s, isTrackUnlocked(track))).join('')}
+      </div>
+      <div class="add-step-row">
+        <input type="text" placeholder="+ stap toevoegen" id="addstep_${track}" onkeydown="if(event.key==='Enter') addStepUI('${projectId}','${track}')">
+        <button class="small" onclick="addStepUI('${projectId}','${track}')">Toevoegen</button>
+      </div>
+      ${!isTrackUnlocked(track) ? '<div class="hint" style="padding:0 12px 10px;">Ontgrendelt zodra productie bij "Edit & afronding" is.</div>' : ''}
+      ${splitMeeting && meetingSteps.length ? `
+        <div class="meeting-tasks-subhead">\u{1F399}\uFE0F Vanuit meetings</div>
+        <div class="step-list" id="steplist_${track}_meeting" data-track="${track}" data-project="${projectId}">
+          ${sortForDisplay(meetingSteps).map(s => stepHtml(projectId, s, isTrackUnlocked(track))).join('')}
+        </div>
+      ` : ''}
+      ${algemeenSteps ? `
+        <div class="algemeen-subblock">
+          <div class="track-head"><div class="track-head-left"><span class="dot" style="background:${TRACK_COLORS.algemeen}"></span>Algemeen</div></div>
+          <div class="step-list" id="steplist_algemeen" data-track="algemeen" data-project="${projectId}">
+            ${sortForDisplay(algemeenSteps).map(s => stepHtml(projectId, s, true)).join('')}
+          </div>
+          <div class="add-step-row">
+            <input type="text" placeholder="+ stap toevoegen" id="addstep_algemeen" onkeydown="if(event.key==='Enter') addStepUI('${projectId}','algemeen')">
+            <button class="small" onclick="addStepUI('${projectId}','algemeen')">Toevoegen</button>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  };
+
+  const benchmarkHtml = !isOverig ? (
+    p.status === 'live' ? `
+    <div class="benchmark-section">
+      <h3>Luistercijfers per week</h3>
+      <div id="statsChartWrap">${renderStatsChart(stats, p.audio_type || 'audio')}</div>
+      <div class="stats-add-row">
+        <input type="text" placeholder="week (bijv. 1)" id="statWeek" style="width:70px;">
+        <input type="number" placeholder="Springcast downloads" id="statDownloads">
+        <input type="number" placeholder="YouTube views" id="statYoutube">
+        <button class="small primary" onclick="addStatWeek('${projectId}')">Toevoegen</button>
+      </div>
+      ${stats.length ? `
+        <div class="stats-list">
+          ${stats.map(s => `
+            <div class="stats-list-row" id="statrow_${s.id}">
+              <span class="stats-list-week">${escapeHtml(s.week_label || ('week '+s.week_number))}</span>
+              <span class="stats-list-val">Springcast: ${s.downloads ?? '\u2013'}</span>
+              <span class="stats-list-val">YouTube: ${s.youtube_views ?? '\u2013'}</span>
+              <button class="stats-list-btn" title="Aanpassen" onclick="editStatWeek('${projectId}','${s.id}')">\u270e</button>
+              <button class="stats-list-btn" title="Verwijderen" onclick="deleteStatWeek('${projectId}','${s.id}')">\u00d7</button>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+      ${benchmarks.filter(b => b.status !== 'done').length ? `
+        <div class="hint" style="margin-top:12px;">Vier-wekelijkse check: ${benchmarks.filter(b=>b.status!=='done').map(b=>'week '+b.week_number).join(', ')} \u2014 vul de cijfers hierboven in om de zone te zien.</div>
+      ` : ''}
+    </div>
+  ` : '<div class="benchmark-section"><h3>Luistercijfers</h3><div class="state-msg" style="padding:8px 0;">Verschijnt zodra het project live is.</div></div>') : '';
+
+  const cd = countdownLabel(p.launch_date);
+
+  detail.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-header-left">
+        ${isShared ? '' : `<button class="back-btn ghost" onclick="closeProject()">\u2190 terug</button>`}
+        <div>
+          <div class="detail-title-row">
+            <h2 class="detail-title">${escapeHtml(p.name)}</h2>
+            ${isShared ? '' : `<button class="ghost edit-project-btn" onclick='showEditProjectModal(${JSON.stringify(p)})'>\u270e</button><button class="ghost share-project-btn" onclick="shareProject('${p.id}')">\u{1F517} Delen</button>`}
+          </div>
+          <div class="detail-sub">${statusLabel(p.status)}${p.frequency ? ' \u00b7 ' + escapeHtml(p.frequency) : ''} \u00b7 start ${isoToDutch(p.start_date)}${p.launch_date ? ' \u00b7 ' + (isOverig?'deadline ':'launch ') + isoToDutch(p.launch_date) : ''}${p.springcast_id ? ' \u00b7 Springcast-ID ' + escapeHtml(p.springcast_id) : ''}</div>
+        </div>
+      </div>
+      ${!isShared ? `
+      <div class="detail-header-right">
+        ${recButtonHtml('recBtn_' + p.id, { projectId: p.id })}
+        ${p.launch_date ? `<div class="countdown-badge ${cd.cls}">${isOverig?'deadline':'launch'}: ${cd.text}</div>` : ''}
+        ${!isOverig ? `
+          <button class="live-toggle-btn ${p.status==='live'?'is-live':''}" onclick="toggleLiveStatus('${p.id}','${p.status}')">${p.status==='live' ? '\u{1F7E2} Live' : '\u26AA Niet live'}</button>
+          <button class="ghost small" onclick="addToLiveShows('${p.id}')">+ Lopende podcasts</button>
+        ` : ''}
+      </div>` : (p.launch_date ? `<div class="countdown-badge ${cd.cls}">${isOverig?'deadline':'launch'}: ${cd.text}</div>` : '')}
+    </div>
+    ${!isOverig ? platformButtonsHtml('projects', p.id, p) : ''}
+    <div id="detailTimeline"></div>
+    <div class="detail-tabs">
+      <button class="detail-tab-btn active" id="tabBtn_overzicht_${p.id}" onclick="switchDetailTab('${p.id}','overzicht')">Overzicht</button>
+      <button class="detail-tab-btn" id="tabBtn_meetings_${p.id}" onclick="switchDetailTab('${p.id}','meetings')">Meetings${meetingNotes.length ? ' (' + meetingNotes.length + ')' : ''}</button>
+    </div>
+    <div id="tabContent_overzicht_${p.id}" class="detail-tab-content">
+      <div class="project-concept">
+        <label>Idee & doelgroep</label>
+        <textarea id="conceptInput_${p.id}" placeholder="Waar gaat deze podcast over, en voor wie is die bedoeld?" onblur="saveConcept('${p.id}')">${escapeHtml(p.concept || '')}</textarea>
+      </div>
+      <div class="tracks ${isOverig ? 'single' : ''}">
+        ${isOverig ? trackHtml('taken', tracks.taken) : trackHtml('productie', tracks.productie, tracks.algemeen) + trackHtml('marketing', tracks.marketing) + trackHtml('distributie', tracks.distributie)}
+      </div>
+      ${benchmarkHtml}
+    </div>
+    <div id="tabContent_meetings_${p.id}" class="detail-tab-content hidden">
+      <div id="meetingList_${p.id}">${meetingNotesListHtml(p.id, meetingNotes)}</div>
+    </div>
+  `;
+
+  const trackKeys = isOverig ? ['taken'] : ['productie','marketing','distributie'];
+  const tlRows = trackKeys.map(track => {
+    const trackSteps = tracks[track];
+    const r = trackRangeForProject(p, track, trackSteps);
+    const doneCount = trackSteps.filter(s=>s.status==='done').length;
+    return { label: TRACK_LABELS[track], color: TRACK_COLORS[track], start: r.start, end: r.end,
+      sublabel: trackSteps.length ? (doneCount + '/' + trackSteps.length + ' klaar') : '',
+      markers: trackSteps.filter(s=>s.due_date).map(s => ({date: new Date(s.due_date), label: s.step_name, color: s.status==='done'?'#4caf7d':'#e0a63a'})) };
+  });
+  renderTimeline('detailTimeline', tlRows);
+  trackKeys.forEach(track => setupDragDrop(document.getElementById('steplist_' + track)));
+}
+
+function stepHtml(projectId, s, trackUnlocked) {
+  const cls = s.status === 'done' ? 'done' : (trackUnlocked ? 'active' : 'locked');
+  const clickable = trackUnlocked;
+  const hasNote = !!(s.note && s.note.trim());
+  const subtasks = Array.isArray(s.subtasks) ? s.subtasks : [];
+  const images = Array.isArray(s.images) ? s.images : [];
+  const allSubDone = subtasks.every(st => st.done);
+  const blocked = s.status !== 'done' && subtasks.length > 0 && !allSubDone;
+  const prio = s.priority || '';
+  return `
+    <div class="step ${cls}" draggable="true" data-step-id="${s.id}">
+      <div class="step-check ${blocked?'blocked':''}" ${clickable ? `onclick="toggleStepClick('${projectId}','${s.track}',${s.order_num})"` : ''} title="${blocked ? 'Rond eerst alle subtaken af' : ''}">${s.status === 'done' ? '\u2713' : ''}</div>
+      <div class="step-main">
+        <div class="step-name" id="stepname_${s.id}">${escapeHtml(s.step_name)}</div>
+        ${s.due_date ? `<div class="step-due">${fmtDate(s.due_date)}</div>` : ''}
+        <div id="notewrap_${s.id}">${hasNote ? `<div class="step-note-text" onclick="startEditNote('${s.id}')">${escapeHtml(s.note)}</div>` : ''}</div>
+        <div id="subtasks_${s.id}">${subtasks.length ? subtaskListHtml(projectId, s.id, subtasks) : ''}</div>
+        <div id="images_${s.id}" class="step-images">${imageListHtml(projectId, s.id, images)}</div>
+      </div>
+      <button class="prio-flag prio-${prio||'none'}" title="Prioriteit instellen" onclick="cyclePriority('${projectId}','${s.id}','${prio}')">\u2691</button>
+      <div class="step-actions">
+        <button title="Afbeelding toevoegen" onclick="triggerImageUpload('${projectId}','${s.id}')">\u{1F4F7}</button>
+        <input type="file" accept="image/*" class="hidden" id="imgfile_${s.id}" onchange="handleImageSelected('${projectId}','${s.id}')">
+        <button title="Subtaak toevoegen" onclick="showSubtaskInput('${projectId}','${s.id}')">+</button>
+        <button class="${hasNote?'has-note':''}" title="Notitie" onclick="startEditNote('${s.id}')">\u{1F4DD}</button>
+        <button title="Naam aanpassen" onclick="startRenameStep('${s.id}')">\u270e</button>
+        <button title="Verwijderen" onclick="deleteStepUI('${projectId}','${s.id}')">\u00d7</button>
+      </div>
+    </div>
+  `;
+}
+function imageListHtml(projectId, stepId, images) {
+  if (!images.length) return '';
+  return `<div class="step-thumbs">${images.map(img => `
+    <div class="step-thumb">
+      <img src="${img.url}" onclick="window.open('${img.url}','_blank')" alt="${escapeHtml(img.name||'')}">
+      <button class="step-thumb-del" onclick="deleteStepImage('${projectId}','${stepId}','${img.id}')">\u00d7</button>
+    </div>
+  `).join('')}</div>`;
+}
+function triggerImageUpload(projectId, stepId) {
+  if (!requireOwner()) return;
+  document.getElementById('imgfile_' + stepId).click();
+}
+async function handleImageSelected(projectId, stepId) {
+  if (!requireOwner()) return;
+  const input = document.getElementById('imgfile_' + stepId);
+  const file = input.files[0];
+  if (!file) return;
+  const { url: SB_URL, key: SB_KEY } = getConfig();
+  const authToken = await getAuthToken();
+  const filename = stepId + '_' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  try {
+    const uploadRes = await fetch(`${SB_URL}/storage/v1/object/step-images/${filename}`, {
+      method: 'POST',
+      headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken, 'Content-Type': file.type },
+      body: file
+    });
+    if (!uploadRes.ok) throw new Error('Upload mislukt (' + uploadRes.status + ')');
+    const publicUrl = `${SB_URL}/storage/v1/object/public/step-images/${filename}`;
+    const newImg = { id: uid('img'), url: publicUrl, name: file.name, path: filename };
+    const row = (await sbSelect('project_steps', 'id=eq.' + stepId + '&select=images'))[0];
+    const images = (row && Array.isArray(row.images)) ? row.images : [];
+    images.push(newImg);
+    await sbUpdate('project_steps', 'id=eq.' + stepId, { images });
+    const wrap = document.getElementById('images_' + stepId);
+    if (wrap.querySelector('.step-thumbs')) {
+      wrap.querySelector('.step-thumbs').insertAdjacentHTML('beforeend', `
+        <div class="step-thumb">
+          <img src="${newImg.url}" onclick="window.open('${newImg.url}','_blank')" alt="${escapeHtml(newImg.name)}">
+          <button class="step-thumb-del" onclick="deleteStepImage('${projectId}','${stepId}','${newImg.id}')">\u00d7</button>
+        </div>`);
+    } else {
+      wrap.innerHTML = imageListHtml(projectId, stepId, images);
+    }
+  } catch (err) {
+    alert('Kon afbeelding niet uploaden: ' + err.message);
+  }
+  input.value = '';
+}
+async function deleteStepImage(projectId, stepId, imgId) {
+  if (!requireOwner()) return;
+  if (!confirm('Deze afbeelding verwijderen?')) return;
+  try {
+    const row = (await sbSelect('project_steps', 'id=eq.' + stepId + '&select=images'))[0];
+    const images = (row && Array.isArray(row.images)) ? row.images : [];
+    const target = images.find(i => i.id === imgId);
+    const remaining = images.filter(i => i.id !== imgId);
+    await sbUpdate('project_steps', 'id=eq.' + stepId, { images: remaining });
+    if (target && target.path) {
+      const { url: SB_URL, key: SB_KEY } = getConfig();
+      const authToken = await getAuthToken();
+      await fetch(`${SB_URL}/storage/v1/object/step-images/${target.path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{});
+    }
+    document.getElementById('images_' + stepId).innerHTML = imageListHtml(projectId, stepId, remaining);
+  } catch (err) {
+    alert('Kon afbeelding niet verwijderen: ' + err.message);
+  }
+}
+function showSubtaskInput(projectId, stepId) {
+  if (!requireOwner()) return;
+  const wrap = document.getElementById('subtasks_' + stepId);
+  if (document.getElementById('subtaskadd_' + stepId)) { document.getElementById('subtaskadd_' + stepId).focus(); return; }
+  wrap.insertAdjacentHTML('beforeend', `<div class="subtask-add-row"><input type="text" placeholder="+ subtaak" id="subtaskadd_${stepId}" onkeydown="if(event.key==='Enter') addSubtask('${projectId}','${stepId}')"><button class="small" onclick="addSubtask('${projectId}','${stepId}')">+</button></div>`);
+  document.getElementById('subtaskadd_' + stepId).focus();
+}
+
+async function cyclePriority(projectId, stepId, current) {
+  if (!requireOwner()) return;
+  const order = ['', 'rood', 'oranje', 'groen'];
+  const next = order[(order.indexOf(current) + 1) % order.length];
+  await sbUpdate('project_steps', 'id=eq.' + stepId, { priority: next || null, reminder_pending: !!next, reminder_synced: false });
+  openProject(projectId);
+}
+
+let lastCompletedStep = null;
+
+function toggleStepClick(projectId, track, order) {
+  if (!requireOwner()) return;
+  const stepId = projectId + '_' + track + '_' + order;
+  const el = document.querySelector(`[data-step-id="${stepId}"]`);
+  if (!el) return;
+  if (el.classList.contains('done')) { uncompleteStep(projectId, track, order); return; }
+  const subtasksEl = document.getElementById('subtasks_' + stepId);
+  const hasIncomplete = subtasksEl && subtasksEl.querySelector('.subtask:not(.done)');
+  if (hasIncomplete) {
+    el.querySelector('.step-check').animate([{transform:'translateX(0)'},{transform:'translateX(-3px)'},{transform:'translateX(3px)'},{transform:'translateX(0)'}], {duration:250});
+    return;
+  }
+  completeStep(projectId, track, order);
+}
+
+async function completeStep(projectId, track, order) {
+  const stepId = projectId + '_' + track + '_' + order;
+  const el = document.querySelector(`[data-step-id="${stepId}"]`);
+  if (el) {
+    el.classList.add('fading');
+    setTimeout(() => {
+      el.classList.remove('active');
+      el.classList.add('done');
+      const chk = el.querySelector('.step-check');
+      if (chk) chk.textContent = '\u2713';
+      el.parentNode.appendChild(el);
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('fading')));
+    }, 220);
+  }
+  lastCompletedStep = { projectId, track, order };
+  try {
+    await markStepDone(projectId, track, order);
+    if (track === 'productie' && (order === 4 || order === 5)) openProject(projectId);
+  } catch (err) {
+    alert('Kon stap niet afronden: ' + err.message);
+    openProject(projectId);
+  }
+}
+
+async function uncompleteStep(projectId, track, order) {
+  const stepId = projectId + '_' + track + '_' + order;
+  const el = document.querySelector(`[data-step-id="${stepId}"]`);
+  if (el) {
+    el.classList.add('fading');
+    setTimeout(() => {
+      el.classList.remove('done');
+      el.classList.add('active');
+      const chk = el.querySelector('.step-check');
+      if (chk) chk.textContent = '';
+      const list = el.parentNode;
+      const firstDone = Array.from(list.children).find(c => c !== el && c.classList.contains('done'));
+      if (firstDone) list.insertBefore(el, firstDone); else list.appendChild(el);
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('fading')));
+    }, 220);
+  }
+  if (lastCompletedStep && lastCompletedStep.projectId === projectId && lastCompletedStep.track === track && lastCompletedStep.order === order) lastCompletedStep = null;
+  try { await sbUpdate('project_steps', 'id=eq.' + stepId, { status: 'pending', completed_date: null }); }
+  catch (err) { alert('Ongedaan maken mislukt: ' + err.message); openProject(projectId); }
+}
+
+document.addEventListener('keydown', (e) => {
+  const tag = document.activeElement ? document.activeElement.tagName : '';
+  const isEditable = (document.activeElement && document.activeElement.isContentEditable) || tag === 'INPUT' || tag === 'TEXTAREA';
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !isEditable && lastCompletedStep) {
+    e.preventDefault();
+    const { projectId, track, order } = lastCompletedStep;
+    lastCompletedStep = null;
+    uncompleteStep(projectId, track, order);
+  }
+});
+
+function startRenameStep(stepId) {
+  if (!requireOwner()) return;
+  const el = document.getElementById('stepname_' + stepId);
+  el.contentEditable = 'true'; el.focus(); document.execCommand('selectAll', false, null);
+  const finish = async () => { el.contentEditable = 'false'; const n = el.textContent.trim(); if (n) await sbUpdate('project_steps', 'id=eq.' + stepId, { step_name: n }); };
+  el.onblur = finish;
+  el.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } };
+}
+function startEditNote(stepId) {
+  if (!requireOwner()) return;
+  const wrap = document.getElementById('notewrap_' + stepId);
+  const current = wrap.querySelector('.step-note-text');
+  const existingText = current ? current.textContent : '';
+  wrap.innerHTML = `<textarea class="step-note-input" id="noteinput_${stepId}" rows="2" placeholder="Notitie...">${escapeHtml(existingText)}</textarea>`;
+  const ta = document.getElementById('noteinput_' + stepId);
+  ta.focus();
+  ta.onblur = async () => {
+    const note = ta.value.trim();
+    await sbUpdate('project_steps', 'id=eq.' + stepId, { note });
+    wrap.innerHTML = note ? `<div class="step-note-text" onclick="startEditNote('${stepId}')">${escapeHtml(note)}</div>` : '';
+  };
+}
+function subtaskListHtml(projectId, stepId, subtasks) {
+  return `
+    <div class="subtask-list">
+      ${subtasks.map(st => `
+        <div class="subtask ${st.done?'done':''}" data-sub-id="${st.id}">
+          <div class="subtask-check" onclick="toggleSubtask('${projectId}','${stepId}','${st.id}')">${st.done?'\u2713':''}</div>
+          <span class="subtask-text" onclick="toggleSubtask('${projectId}','${stepId}','${st.id}')">${escapeHtml(st.text)}</span>
+          <button class="subtask-del" onclick="deleteSubtask('${projectId}','${stepId}','${st.id}')">\u00d7</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+function subtaskRowHtml(projectId, stepId, st) {
+  return `<div class="subtask ${st.done?'done':''}" data-sub-id="${st.id}">
+    <div class="subtask-check" onclick="toggleSubtask('${projectId}','${stepId}','${st.id}')">${st.done?'\u2713':''}</div>
+    <span class="subtask-text" onclick="toggleSubtask('${projectId}','${stepId}','${st.id}')">${escapeHtml(st.text)}</span>
+    <button class="subtask-del" onclick="deleteSubtask('${projectId}','${stepId}','${st.id}')">\u00d7</button>
+  </div>`;
+}
+async function getStepSubtasks(stepId) {
+  const row = (await sbSelect('project_steps', 'id=eq.' + stepId + '&select=subtasks'))[0];
+  return (row && Array.isArray(row.subtasks)) ? row.subtasks : [];
+}
+async function addSubtask(projectId, stepId) {
+  if (!requireOwner()) return;
+  const input = document.getElementById('subtaskadd_' + stepId);
+  const text = input.value.trim(); if (!text) return;
+  const newSub = { id: uid('sub'), text, done: false };
+  const wrap = document.getElementById('subtasks_' + stepId);
+  const addRow = input.closest('.subtask-add-row');
+  let list = wrap.querySelector('.subtask-list');
+  if (!list) { wrap.insertAdjacentHTML('afterbegin', '<div class="subtask-list"></div>'); list = wrap.querySelector('.subtask-list'); }
+  list.insertAdjacentHTML('beforeend', subtaskRowHtml(projectId, stepId, newSub));
+  if (addRow) addRow.remove();
+  try {
+    const subtasks = await getStepSubtasks(stepId);
+    subtasks.push(newSub);
+    await sbUpdate('project_steps', 'id=eq.' + stepId, { subtasks });
+  } catch (err) { alert('Kon subtaak niet toevoegen: ' + err.message); }
+}
+async function toggleSubtask(projectId, stepId, subId) {
+  if (!requireOwner()) return;
+  const el = document.querySelector(`#subtasks_${stepId} .subtask[data-sub-id="${subId}"]`);
+  let willBeDone = true;
+  if (el) {
+    willBeDone = !el.classList.contains('done');
+    el.classList.toggle('done', willBeDone);
+    el.querySelector('.subtask-check').textContent = willBeDone ? '\u2713' : '';
+  }
+  try {
+    const subtasks = await getStepSubtasks(stepId);
+    const st = subtasks.find(s => s.id === subId);
+    if (st) st.done = willBeDone;
+    await sbUpdate('project_steps', 'id=eq.' + stepId, { subtasks });
+  } catch (err) { alert('Kon subtaak niet bijwerken: ' + err.message); }
+}
+async function deleteSubtask(projectId, stepId, subId) {
+  if (!requireOwner()) return;
+  const el = document.querySelector(`#subtasks_${stepId} .subtask[data-sub-id="${subId}"]`);
+  if (el) el.remove();
+  try {
+    const subtasks = (await getStepSubtasks(stepId)).filter(s => s.id !== subId);
+    await sbUpdate('project_steps', 'id=eq.' + stepId, { subtasks });
+  } catch (err) { alert('Kon subtaak niet verwijderen: ' + err.message); }
+}
+
+async function deleteStepUI(projectId, stepId) {
+  if (!requireOwner()) return; if (!confirm('Deze stap verwijderen?')) return; await deleteStep(stepId); openProject(projectId); }
+async function addStepUI(projectId, track) {
+  if (!requireOwner()) return;
+  const input = document.getElementById('addstep_' + track);
+  const name = input.value.trim(); if (!name) return;
+  input.disabled = true;
+  try {
+    const newStep = await addStep(projectId, track, name);
+    const listEl = document.getElementById('steplist_' + track);
+    listEl.insertAdjacentHTML('beforeend', stepHtml(projectId, newStep, true));
+    input.value = '';
+  } catch (err) {
+    alert('Kon taak niet toevoegen: ' + err.message);
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
+}
+async function submitBenchmark(checkId, projectId) {
+  const val = document.getElementById('bmInput_' + checkId).value; if (!val) return;
+  await updateBenchmark(checkId, Number(val)); openProject(projectId);
+}
+
+function setupDragDrop(listEl) {
+  if (!listEl || listEl.__dragWired) return;
+  listEl.__dragWired = true;
+  let draggedId = null;
+  listEl.addEventListener('dragstart', (e) => {
+    if (!isOwner) { e.preventDefault(); return; }
+    const stepEl = e.target.closest('.step');
+    if (!stepEl) return;
+    draggedId = stepEl.dataset.stepId;
+    stepEl.classList.add('dragging');
+  });
+  listEl.addEventListener('dragend', (e) => {
+    const stepEl = e.target.closest('.step');
+    if (stepEl) stepEl.classList.remove('dragging');
+    listEl.querySelectorAll('.step').forEach(s => s.classList.remove('drag-over'));
+  });
+  listEl.addEventListener('dragover', (e) => {
+    const stepEl = e.target.closest('.step');
+    if (!stepEl) return;
+    e.preventDefault();
+    stepEl.classList.add('drag-over');
+  });
+  listEl.addEventListener('dragleave', (e) => {
+    const stepEl = e.target.closest('.step');
+    if (stepEl) stepEl.classList.remove('drag-over');
+  });
+  listEl.addEventListener('drop', async (e) => {
+    const stepEl = e.target.closest('.step');
+    if (!stepEl) return;
+    e.preventDefault(); stepEl.classList.remove('drag-over');
+    const targetId = stepEl.dataset.stepId;
+    if (!draggedId || draggedId === targetId) return;
+    const items = Array.from(listEl.querySelectorAll('.step'));
+    const draggedEl = items.find(i => i.dataset.stepId === draggedId);
+    if (!draggedEl) return;
+    const targetIdx = items.indexOf(stepEl);
+    listEl.insertBefore(draggedEl, items.indexOf(draggedEl) < targetIdx ? stepEl.nextSibling : stepEl);
+    const orderedIds = Array.from(listEl.querySelectorAll('.step')).map(s => s.dataset.stepId);
+    const projectId = listEl.dataset.project, track = listEl.dataset.track;
+    try { await reorderSteps(projectId, track, orderedIds); openProject(projectId); }
+    catch (err) { alert('Herordenen mislukt: ' + err.message); openProject(projectId); }
+  });
+}
+function closeProject(fromHistory) {
+  document.getElementById('detailView').classList.add('hidden');
+  document.getElementById('liveShowsView').classList.add('hidden');
+  document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('homeView').classList.remove('hidden');
+  document.getElementById('navLiveShows').classList.remove('active');
+  document.getElementById('navHome').classList.add('active');
+  if (!fromHistory && window.location.search) {
+    history.pushState({ view: 'home' }, '', window.location.pathname);
+  }
+  loadHome();
+}
+
+// ================= Init =================
+document.getElementById('authBtn').onclick = handleAuthClick;
+initAuthState();
+document.getElementById('newProjectBtn').onclick = showNewProjectModal;
+document.getElementById('homeLink').onclick = () => goHome();
+document.getElementById('navHome').onclick = () => showHomeFromNav();
+document.getElementById('navLiveShows').onclick = () => showLiveShowsView();
+document.getElementById('navHome').classList.add('active');
+
+function parseRouteFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('share')) return { view: 'shared', id: params.get('share') };
+  if (params.get('showshare')) return { view: 'showshared', id: params.get('showshare') };
+  if (params.get('project')) return { view: 'project', id: params.get('project') };
+  if (params.get('show')) return { view: 'show', id: params.get('show') };
+  if (params.get('view') === 'shows') return { view: 'shows' };
+  return { view: 'home' };
+}
+
+window.addEventListener('popstate', (e) => {
+  const route = e.state || parseRouteFromUrl();
+  if (route.view === 'project' && route.id) openProject(route.id, false, true);
+  else if (route.view === 'show' && route.id) openShow(route.id, true);
+  else if (route.view === 'shows') showLiveShowsView(true);
+  else closeProject(true);
+});
+
+const __initialRoute = parseRouteFromUrl();
+if (__initialRoute.view === 'shared') {
+  document.getElementById('newProjectBtn').style.display = 'none';
+  document.querySelector('.top-nav').style.display = 'none';
+  document.getElementById('homeLink').style.cursor = 'default';
+  document.getElementById('homeLink').onclick = null;
+  history.replaceState({ view: 'shared', id: __initialRoute.id }, '');
+  openProject(__initialRoute.id, true);
+} else if (__initialRoute.view === 'showshared') {
+  document.getElementById('newProjectBtn').style.display = 'none';
+  document.querySelector('.top-nav').style.display = 'none';
+  document.getElementById('homeLink').style.cursor = 'default';
+  document.getElementById('homeLink').onclick = null;
+  history.replaceState({ view: 'showshared', id: __initialRoute.id }, '');
+  openShow(__initialRoute.id, true, true);
+} else if (__initialRoute.view === 'project') {
+  history.replaceState({ view: 'project', id: __initialRoute.id }, '');
+  openProject(__initialRoute.id, false, true);
+} else if (__initialRoute.view === 'show') {
+  history.replaceState({ view: 'show', id: __initialRoute.id }, '');
+  openShow(__initialRoute.id, true);
+} else if (__initialRoute.view === 'shows') {
+  history.replaceState({ view: 'shows' }, '');
+  showLiveShowsView(true);
+} else {
+  history.replaceState({ view: 'home' }, '', window.location.pathname);
+  loadHome();
+}
+</script>
+</body>
+</html>
