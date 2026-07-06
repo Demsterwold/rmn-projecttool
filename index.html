@@ -440,7 +440,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-07 01:00</div>
+<div class="build-tag">build 2026-07-07 01:08</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -3145,6 +3145,24 @@ document.getElementById('homeLink').onclick = () => goHome();
 document.getElementById('navHome').onclick = () => showHomeFromNav();
 document.getElementById('navLiveShows').onclick = () => showLiveShowsView();
 document.getElementById('navHome').classList.add('active');
+
+// Maandagochtend-herinnering: alleen zichtbaar als de tool op dat moment open staat
+// (geen echte pushmelding - dit is een pop-up binnen de pagina zelf).
+function checkMondayReminder() {
+  const now = new Date();
+  if (now.getDay() !== 1 || now.getHours() < 10) return;
+  const todayKey = 'mondayReminderShown_' + now.toISOString().slice(0,10);
+  if (localStorage.getItem(todayKey)) return;
+  localStorage.setItem(todayKey, '1');
+  renderModal(`
+    <h2>\u{1F4C5} Maandagochtend-check</h2>
+    <div class="hint">Tijd om de wekelijkse Springcast/YouTube-cijfers bij te werken. Open Springcast, en zeg tegen Claude "update de weekcijfers" \u2014 dan vult die per lopende podcast alleen de ontbrekende week aan.</div>
+    <div class="modal-actions"><button class="primary" id="modalCancel">Begrepen</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+}
+checkMondayReminder();
+setInterval(checkMondayReminder, 10 * 60 * 1000);
 
 function parseRouteFromUrl() {
   const params = new URLSearchParams(window.location.search);
