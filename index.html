@@ -142,9 +142,9 @@
   .step:last-child { border-bottom: none; }
   .step-check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--text-faint); flex-shrink: 0; margin-top: 1px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.12s; }
   .step.done .step-check { background: var(--green); border-color: var(--green); color: #0c1220; }
-  .step:not(.done).prio-rood { box-shadow: inset 0 0 0 1px rgba(226,88,90,0.5), 0 0 14px 1px rgba(226,88,90,0.45); background: rgba(226,88,90,0.06); }
-  .step:not(.done).prio-oranje { box-shadow: inset 0 0 0 1px rgba(224,166,58,0.5), 0 0 14px 1px rgba(224,166,58,0.45); background: rgba(224,166,58,0.06); }
-  .step:not(.done).prio-groen { box-shadow: inset 0 0 0 1px rgba(76,175,125,0.5), 0 0 14px 1px rgba(76,175,125,0.45); background: rgba(76,175,125,0.06); }
+  .step:not(.done).prio-rood { box-shadow: inset 0 0 16px 1px rgba(226,88,90,0.5); background: rgba(226,88,90,0.06); }
+  .step:not(.done).prio-oranje { box-shadow: inset 0 0 16px 1px rgba(224,166,58,0.5); background: rgba(224,166,58,0.06); }
+  .step:not(.done).prio-groen { box-shadow: inset 0 0 16px 1px rgba(76,175,125,0.5); background: rgba(76,175,125,0.06); }
   .step.active .step-check:hover { border-color: var(--text); }
   .step.locked { opacity: 0.4; }
   .step.locked .step-check { cursor: default; }
@@ -321,6 +321,9 @@
   .home-sidebar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .home-sidebar h3 { margin: 0; padding: 14px 16px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); border-bottom: 1px solid var(--border); }
   .sidebar-todo { display: flex; align-items: flex-start; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; }
+  .sidebar-todo.prio-rood { box-shadow: inset 0 0 16px 1px rgba(226,88,90,0.5); background: rgba(226,88,90,0.06); }
+  .sidebar-todo.prio-oranje { box-shadow: inset 0 0 16px 1px rgba(224,166,58,0.5); background: rgba(224,166,58,0.06); }
+  .sidebar-todo.prio-groen { box-shadow: inset 0 0 16px 1px rgba(76,175,125,0.5); background: rgba(76,175,125,0.06); }
   .sidebar-todo:last-child { border-bottom: none; }
   .sidebar-todo:hover { background: var(--panel-hover); }
   .sidebar-prio { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
@@ -434,7 +437,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-07 00:30</div>
+<div class="build-tag">build 2026-07-07 00:45</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -2011,19 +2014,24 @@ async function loadHome() {
     renderHomeCalendar('homeCal', projects);
     renderProjectList('homeListWrap', projects);
     if (!projects.length) calWrap.innerHTML += '<div class="state-msg">Nog geen projecten. Klik op "+ Nieuw project" om te starten.</div>';
-    loadSidebarTodos(projects);
+    const showProjects = await sbSelect('projects', 'select=*&is_show_project=is.true').catch(() => []);
+    const showLinks = await sbSelect('live_shows', 'select=id,linked_project_id&linked_project_id=not.is.null').catch(() => []);
+    const projectToShow = {}; showLinks.forEach(l => { if (l.linked_project_id) projectToShow[l.linked_project_id] = l.id; });
+    loadSidebarTodos(projects, showProjects, projectToShow);
     loadPersonalTodos();
   } catch (e) {
     calWrap.innerHTML = `<div class="state-msg">Kon projecten niet laden (${escapeHtml(e.message)}).<br><button class="small" onclick="loadHome()">Opnieuw proberen</button></div>`;
   }
 }
-async function loadSidebarTodos(projects) {
+async function loadSidebarTodos(projects, showProjects, projectToShow) {
+  projectToShow = projectToShow || {};
   const sidebar = document.getElementById('homeSidebar');
   const today = new Date(); today.setHours(0,0,0,0);
   const startedProjects = projects.filter(p => p.start_date && new Date(p.start_date) <= today);
-  if (!startedProjects.length) { sidebar.innerHTML = '<h3>Openstaande taken</h3><div class="state-msg" style="padding:20px;">Niets openstaand.</div>'; return; }
+  const allEligible = startedProjects.concat(showProjects || []);
+  if (!allEligible.length) { sidebar.innerHTML = '<h3>Openstaande taken</h3><div class="state-msg" style="padding:20px;">Niets openstaand.</div>'; return; }
   try {
-    const projectMap = {}; startedProjects.forEach(p => projectMap[p.id] = p);
+    const projectMap = {}; allEligible.forEach(p => projectMap[p.id] = p);
     const steps = await sbSelect('project_steps', 'status=neq.done&select=id,project_id,track,step_name,priority,order_num&order=order_num.asc');
     const relevant = steps.filter(s => projectMap[s.project_id]);
 
@@ -2065,7 +2073,8 @@ async function loadSidebarTodos(projects) {
     if (!merged.length) { sidebar.innerHTML = '<h3>Openstaande taken</h3><div class="state-msg" style="padding:20px;">Niets openstaand.</div>'; return; }
     sidebar.innerHTML = `<h3>Openstaande taken</h3>${merged.map(s => {
       const proj = projectMap[s.project_id];
-      return `<div class="sidebar-todo" onclick="openProject('${s.project_id}')">
+      const clickTarget = projectToShow[s.project_id] ? `openShow('${projectToShow[s.project_id]}')` : `openProject('${s.project_id}')`;
+      return `<div class="sidebar-todo prio-${s.priority||'none'}" onclick="${clickTarget}">
         <span class="sidebar-prio ${s.priority||'none'}"></span>
         <div class="sidebar-todo-text">${escapeHtml(s.step_name)}<div class="sidebar-todo-proj" style="color:${proj.color}">${escapeHtml(proj.name)}</div></div>
       </div>`;
@@ -2831,7 +2840,17 @@ async function cyclePriority(projectId, stepId, current) {
   const order = ['', 'rood', 'oranje', 'groen'];
   const next = order[(order.indexOf(current) + 1) % order.length];
   await sbUpdate('project_steps', 'id=eq.' + stepId, { priority: next || null, reminder_pending: !!next, reminder_synced: false });
-  refreshProjectView(projectId);
+  const stepEl = document.querySelector(`[data-step-id="${stepId}"]`);
+  if (stepEl) {
+    ['prio-none','prio-rood','prio-oranje','prio-groen'].forEach(c => stepEl.classList.remove(c));
+    stepEl.classList.add('prio-' + (next || 'none'));
+    const flagBtn = stepEl.querySelector('.prio-flag');
+    if (flagBtn) {
+      ['prio-none','prio-rood','prio-oranje','prio-groen'].forEach(c => flagBtn.classList.remove(c));
+      flagBtn.classList.add('prio-' + (next || 'none'));
+      flagBtn.setAttribute('onclick', `cyclePriority('${projectId}','${stepId}','${next}')`);
+    }
+  }
 }
 
 let lastCompletedStep = null;
