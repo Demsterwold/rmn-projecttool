@@ -431,7 +431,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-06 23:35</div>
+<div class="build-tag">build 2026-07-06 23:45</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -1445,26 +1445,6 @@ async function openShow(showId, fromHistory, isShared) {
   const yearsPresent = [...new Set(stats.map(s => s.year))];
   [2024,2025,2026].forEach(y => { if (!yearsPresent.includes(y)) yearsPresent.push(y); });
 
-  // Prepare the Project tab content up front (not lazily on click) so it can never be silently blank.
-  let projectTabHtml = '';
-  if (!isShared) {
-    try {
-      if (!isOwner) {
-        projectTabHtml = `<div class="state-msg">Ontgrendel eerst met Face ID/Touch ID (het slotje rechtsboven) om deze pagina te gebruiken.<br><button class="small" onclick="openShow('${showId}',true)">Opnieuw proberen</button></div>`;
-      } else {
-        const linkedId = await ensureLinkedProject(showId);
-        const [steps, meetingNotes] = await Promise.all([
-          sbSelect('project_steps', 'project_id=eq.' + linkedId + '&select=*&order=order_num.asc'),
-          sbSelect('meeting_notes', 'project_id=eq.' + linkedId + '&select=*&order=created_at.desc')
-        ]);
-        projectTabHtml = embeddedProjectHtml(linkedId, steps, meetingNotes);
-      }
-    } catch (err) {
-      console.error('Project tab load error:', err);
-      projectTabHtml = `<div class="state-msg">Kon dit tabblad niet laden (${escapeHtml(err.message)}).<br><button class="small" onclick="openShow('${showId}',true)">Opnieuw proberen</button></div>`;
-    }
-  }
-
   view.innerHTML = `
     <div class="detail-header">
       <div class="detail-header-left">
@@ -1507,12 +1487,11 @@ async function openShow(showId, fromHistory, isShared) {
         <div id="statsMonthWrap_${showId}"></div>
       ` : ''}
     </div>
-    ${isShared ? '' : `<div id="showTabContent_project_${showId}" class="detail-tab-content hidden">${projectTabHtml}</div>`}
+    ${isShared ? '' : `<div id="showTabContent_project_${showId}" class="detail-tab-content hidden">${embeddedProjectShellHtml(showId)}</div>`}
   `;
   if (stats.length) renderStatsMonthPager(showId, 0);
   if (!isShared) {
-    const container = document.getElementById('showTabContent_project_' + showId);
-    if (container) { container.dataset.loaded = '1'; setupDragDrop(document.getElementById('steplist_taken')); }
+    loadEmbeddedProjectData(showId); // fires in the background; the shell above is already fully visible regardless
   }
 }
 function switchShowTab(showId, tabName) {
@@ -1523,6 +1502,95 @@ function switchShowTab(showId, tabName) {
     if (btnEl) btnEl.classList.toggle('active', t === tabName);
   });
 }
+// Always-visible shell for a show's embedded Project tab. No data dependency at all -
+// this markup renders the same regardless of auth state, network, or database content,
+// so this tab can never appear blank. Real data is loaded in afterward via loadEmbeddedProjectData.
+function embeddedProjectShellHtml(showId) {
+  return `
+    <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+      ${recButtonHtml('recBtn_embed_' + showId, { showId })}
+    </div>
+    <div class="detail-tabs">
+      <button class="detail-tab-btn active" id="embedTabBtn_overzicht_${showId}" onclick="switchEmbedTab('${showId}','overzicht')">To-do's</button>
+      <button class="detail-tab-btn" id="embedTabBtn_meetings_${showId}" onclick="switchEmbedTab('${showId}','meetings')">Meetings</button>
+    </div>
+    <div id="embedTabContent_overzicht_${showId}" class="detail-tab-content">
+      <div class="tracks single">
+        <div class="track-col">
+          <div class="track-head"><div class="track-head-left"><span class="dot" style="background:#8a7fd9"></span>To-do's</div></div>
+          <div class="step-list" id="embedSteplist_${showId}" data-show="${showId}">
+            <div class="state-msg">Laden\u2026</div>
+          </div>
+          <div class="add-step-row">
+            <input type="text" placeholder="+ taak toevoegen" id="embedAddstep_${showId}" onkeydown="if(event.key==='Enter') addStepToShow('${showId}')">
+            <button class="small" onclick="addStepToShow('${showId}')">Toevoegen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="embedTabContent_meetings_${showId}" class="detail-tab-content hidden">
+      <div id="embedMeetingList_${showId}"><div class="state-msg">Laden\u2026</div></div>
+    </div>
+  `;
+}
+function switchEmbedTab(showId, tabName) {
+  ['overzicht', 'meetings'].forEach(t => {
+    const contentEl = document.getElementById('embedTabContent_' + t + '_' + showId);
+    const btnEl = document.getElementById('embedTabBtn_' + t + '_' + showId);
+    if (contentEl) contentEl.classList.toggle('hidden', t !== tabName);
+    if (btnEl) btnEl.classList.toggle('active', t === tabName);
+  });
+}
+// Resolves (creating if needed) the linked project, then fills the already-visible shell
+// with the real to-do list and meeting list. Any failure here only affects these two
+// inner areas, never the shell itself.
+async function loadEmbeddedProjectData(showId) {
+  const stepListEl = document.getElementById('embedSteplist_' + showId);
+  const meetingListEl = document.getElementById('embedMeetingList_' + showId);
+  if (!isOwner) {
+    const msg = '<div class="state-msg">Ontgrendel met Face ID/Touch ID (het slotje rechtsboven) om taken en meetings te zien.<br><button class="small" onclick="loadEmbeddedProjectData(\'' + showId + '\')">Opnieuw proberen</button></div>';
+    if (stepListEl) stepListEl.innerHTML = msg;
+    if (meetingListEl) meetingListEl.innerHTML = msg;
+    return;
+  }
+  try {
+    const linkedId = await ensureLinkedProject(showId);
+    window.__showLinkedProject = window.__showLinkedProject || {};
+    window.__showLinkedProject[showId] = linkedId;
+    const [steps, meetingNotes] = await Promise.all([
+      sbSelect('project_steps', 'project_id=eq.' + linkedId + '&select=*&order=order_num.asc'),
+      sbSelect('meeting_notes', 'project_id=eq.' + linkedId + '&select=*&order=created_at.desc')
+    ]);
+    if (stepListEl) {
+      stepListEl.innerHTML = sortForDisplay(steps).map(s => stepHtml(linkedId, s, true)).join('') || '<div class="state-msg" style="padding:10px 0;">Nog geen taken.</div>';
+      setupDragDrop(stepListEl);
+    }
+    const meetingTabBtn = document.getElementById('embedTabBtn_meetings_' + showId);
+    if (meetingTabBtn) meetingTabBtn.textContent = 'Meetings' + (meetingNotes.length ? ' (' + meetingNotes.length + ')' : '');
+    if (meetingListEl) meetingListEl.innerHTML = meetingNotesListHtml(linkedId, meetingNotes);
+  } catch (err) {
+    console.error('loadEmbeddedProjectData error:', err);
+    const msg = `<div class="state-msg">Kon niet laden (${escapeHtml(err.message)}).<br><button class="small" onclick="loadEmbeddedProjectData('${showId}')">Opnieuw proberen</button></div>`;
+    if (stepListEl) stepListEl.innerHTML = msg;
+    if (meetingListEl) meetingListEl.innerHTML = msg;
+  }
+}
+async function addStepToShow(showId) {
+  if (!requireOwner()) return;
+  const input = document.getElementById('embedAddstep_' + showId);
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    const linkedId = (window.__showLinkedProject && window.__showLinkedProject[showId]) || await ensureLinkedProject(showId);
+    window.__showLinkedProject = window.__showLinkedProject || {};
+    window.__showLinkedProject[showId] = linkedId;
+    await addStep(linkedId, 'taken', text);
+    await loadEmbeddedProjectData(showId);
+  } catch (err) {
+    alert('Kon taak niet toevoegen: ' + err.message);
+  }
+}
 async function ensureLinkedProject(showId) {
   const show = (await sbSelect('live_shows', 'id=eq.' + showId + '&select=linked_project_id,name'))[0];
   if (show.linked_project_id) return show.linked_project_id;
@@ -1530,34 +1598,6 @@ async function ensureLinkedProject(showId) {
   await sbInsert('projects', [{ id: newId, name: show.name, type: 'overig', status: 'live', color: '#7f8fd9', start_date: new Date().toISOString(), is_show_project: true }]);
   await sbUpdate('live_shows', 'id=eq.' + showId, { linked_project_id: newId });
   return newId;
-}
-function embeddedProjectHtml(projectId, steps, meetingNotes) {
-  return `
-    <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-      ${recButtonHtml('recBtn_embed_' + projectId, { projectId })}
-    </div>
-    <div class="detail-tabs">
-      <button class="detail-tab-btn active" id="tabBtn_overzicht_${projectId}" onclick="switchDetailTab('${projectId}','overzicht')">To-do's</button>
-      <button class="detail-tab-btn" id="tabBtn_meetings_${projectId}" onclick="switchDetailTab('${projectId}','meetings')">Meetings${meetingNotes.length ? ' (' + meetingNotes.length + ')' : ''}</button>
-    </div>
-    <div id="tabContent_overzicht_${projectId}" class="detail-tab-content">
-      <div class="tracks single">
-        <div class="track-col">
-          <div class="track-head"><div class="track-head-left"><span class="dot" style="background:#8a7fd9"></span>To-do's</div></div>
-          <div class="step-list" id="steplist_taken" data-track="taken" data-project="${projectId}">
-            ${sortForDisplay(steps).map(s => stepHtml(projectId, s, true)).join('')}
-          </div>
-          <div class="add-step-row">
-            <input type="text" placeholder="+ taak toevoegen" id="addstep_taken" onkeydown="if(event.key==='Enter') addStepUI('${projectId}','taken')">
-            <button class="small" onclick="addStepUI('${projectId}','taken')">Toevoegen</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div id="tabContent_meetings_${projectId}" class="detail-tab-content hidden">
-      <div id="meetingList_${projectId}">${meetingNotesListHtml(projectId, meetingNotes)}</div>
-    </div>
-  `;
 }
 function isoWeekMonday(year, week) {
   const jan4 = new Date(Date.UTC(year, 0, 4));
