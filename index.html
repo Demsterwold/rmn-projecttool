@@ -434,7 +434,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-07 00:18</div>
+<div class="build-tag">build 2026-07-07 00:30</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -807,7 +807,7 @@ function promptTrackStartDate(projectId, track, currentIso) {
       patch = { [field]: toIso(d) };
     }
     await sbUpdate('projects', 'id=eq.' + projectId, patch);
-    closeModal(); openProject(projectId);
+    closeModal(); refreshProjectView(projectId);
   };
 }
 
@@ -864,7 +864,7 @@ async function toggleLiveStatus(projectId, currentStatus) {
       await sbInsert('benchmark_checks', [{ id: uid('bm'), project_id: projectId, week_number: 4, due_date: dueDate, status: 'pending', reminder_pending: true }]);
     }
   }
-  openProject(projectId);
+  refreshProjectView(projectId);
 }
 
 async function addToLiveShows(projectId) {
@@ -1188,7 +1188,7 @@ async function addStatWeek(projectId) {
   const youtube = document.getElementById('statYoutube').value;
   if (!weekVal) { alert('Vul een weeknummer in.'); return; }
   await sbInsert('podcast_stats', [{ id: uid('stat'), project_id: projectId, week_number: Number(weekVal) || 0, week_label: 'week ' + weekVal, downloads: downloads ? Number(downloads) : null, youtube_views: youtube ? Number(youtube) : null }]);
-  openProject(projectId);
+  refreshProjectView(projectId);
 }
 async function editStatWeek(projectId, statId) {
   if (!requireOwner()) return;
@@ -1212,14 +1212,14 @@ async function editStatWeek(projectId, statId) {
       downloads: dl ? Number(dl) : null,
       youtube_views: yt ? Number(yt) : null
     });
-    closeModal(); openProject(projectId);
+    closeModal(); refreshProjectView(projectId);
   };
 }
 async function deleteStatWeek(projectId, statId) {
   if (!requireOwner()) return;
   if (!confirm('Deze week verwijderen?')) return;
   await sbDelete('podcast_stats', 'id=eq.' + statId);
-  openProject(projectId);
+  refreshProjectView(projectId);
 }
 
 const PLATFORM_DEFS = [
@@ -2257,6 +2257,58 @@ async function saveConcept(projectId) {
 
 // ================= Meeting recording & task extraction =================
 const STATUS_LABELS_MN = { recorded: 'Nog te verwerken', transcribing: 'Bezig met verwerken\u2026', ready: 'Klaar om te bekijken', applied: 'Taken toegevoegd' };
+// A project's meeting list can live on its own page (meetingList_<projectId>) or embedded
+// inside a live show's Project tab (embedMeetingList_<showId>). Find whichever is present.
+function findMeetingListEl(projectId) {
+  let el = document.getElementById('meetingList_' + projectId);
+  if (el) return el;
+  if (window.__showLinkedProject) {
+    for (const showId in window.__showLinkedProject) {
+      if (window.__showLinkedProject[showId] === projectId) {
+        el = document.getElementById('embedMeetingList_' + showId);
+        if (el) return el;
+      }
+    }
+  }
+  return null;
+}
+function findMeetingsTabBtn(projectId) {
+  let el = document.getElementById('tabBtn_meetings_' + projectId);
+  if (el) return el;
+  if (window.__showLinkedProject) {
+    for (const showId in window.__showLinkedProject) {
+      if (window.__showLinkedProject[showId] === projectId) {
+        el = document.getElementById('embedTabBtn_meetings_' + showId);
+        if (el) return el;
+      }
+    }
+  }
+  return null;
+}
+function refreshMeetingList(projectId, notes) {
+  const el = findMeetingListEl(projectId);
+  if (el) el.innerHTML = meetingNotesListHtml(projectId, notes);
+  const tabBtn = findMeetingsTabBtn(projectId);
+  if (tabBtn) tabBtn.textContent = 'Meetings' + (notes.length ? ' (' + notes.length + ')' : '');
+}
+// Refreshes whichever view is currently showing this project: the standalone project
+// page, or an embedded Project tab within a live show. Using this instead of calling
+// openProject() directly avoids accidentally navigating away from a show's page.
+function findEmbeddedShowIdForProject(projectId) {
+  if (!window.__showLinkedProject) return null;
+  for (const showId in window.__showLinkedProject) {
+    if (window.__showLinkedProject[showId] === projectId) return showId;
+  }
+  return null;
+}
+function refreshProjectView(projectId) {
+  const embeddedShowId = findEmbeddedShowIdForProject(projectId);
+  if (embeddedShowId && document.getElementById('embedSteplist_' + embeddedShowId)) {
+    loadEmbeddedProjectData(embeddedShowId);
+  } else {
+    openProject(projectId);
+  }
+}
 function meetingNotesListHtml(projectId, notes) {
   if (!notes || !notes.length) return '<div class="state-msg" style="padding:14px 0;">Nog geen meetings opgenomen. Gebruik de REC-knop rechtsboven.</div>';
   return `<div class="meeting-list">${notes.map(n => `
@@ -2381,10 +2433,7 @@ async function saveRecording(projectId, blob) {
     const noteId = uid('meet');
     await sbInsert('meeting_notes', [{ id: noteId, project_id: projectId, title: 'Meeting ' + fmtDate(new Date().toISOString()), audio_path: filename, status: 'recorded' }]);
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-    const listEl = document.getElementById('meetingList_' + projectId);
-    if (listEl) listEl.innerHTML = meetingNotesListHtml(projectId, notes);
-    const tabBtn = document.getElementById('tabBtn_meetings_' + projectId);
-    if (tabBtn) tabBtn.textContent = 'Meetings (' + notes.length + ')';
+    refreshMeetingList(projectId, notes);
   } catch (err) {
     alert('Kon opname niet opslaan: ' + err.message);
   }
@@ -2401,7 +2450,7 @@ async function deleteMeetingNote(noteId, projectId) {
       await fetch(`${SB_URL}/storage/v1/object/meeting-audio/${row.audio_path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{});
     }
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes);
+    refreshMeetingList(projectId, notes);
   } catch (err) {
     alert('Kon opname niet verwijderen: ' + err.message);
   }
@@ -2413,7 +2462,7 @@ async function processMeeting(noteId, projectId) {
   try {
     await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'transcribing' });
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes);
+    refreshMeetingList(projectId, notes);
 
     const note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0];
     const { url: SB_URL, key: SB_KEY } = getConfig();
@@ -2435,12 +2484,12 @@ async function processMeeting(noteId, projectId) {
 
     await sbUpdate('meeting_notes', 'id=eq.' + noteId, { transcript, proposed_tasks: tasks, summary: summary || null, status: 'ready' });
     const notes2 = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes2);
+    refreshMeetingList(projectId, notes2);
     showTaskReviewModal(noteId, projectId);
   } catch (err) {
     await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'recorded' });
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-    document.getElementById('meetingList_' + projectId).innerHTML = meetingNotesListHtml(projectId, notes);
+    refreshMeetingList(projectId, notes);
     alert('Verwerken mislukt: ' + err.message);
   }
 }
@@ -2486,7 +2535,7 @@ async function showTaskReviewModal(noteId, projectId) {
     await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'applied' });
     closeModal();
     alert(added + ' taak/taken toegevoegd.');
-    openProject(projectId, true);
+    refreshProjectView(projectId);
   };
 }
 
@@ -2782,7 +2831,7 @@ async function cyclePriority(projectId, stepId, current) {
   const order = ['', 'rood', 'oranje', 'groen'];
   const next = order[(order.indexOf(current) + 1) % order.length];
   await sbUpdate('project_steps', 'id=eq.' + stepId, { priority: next || null, reminder_pending: !!next, reminder_synced: false });
-  openProject(projectId);
+  refreshProjectView(projectId);
 }
 
 let lastCompletedStep = null;
@@ -2819,10 +2868,10 @@ async function completeStep(projectId, track, order) {
   lastCompletedStep = { projectId, track, order };
   try {
     await markStepDone(projectId, track, order);
-    if (track === 'productie' && (order === 4 || order === 5)) openProject(projectId);
+    if (track === 'productie' && (order === 4 || order === 5)) refreshProjectView(projectId);
   } catch (err) {
     alert('Kon stap niet afronden: ' + err.message);
-    openProject(projectId);
+    refreshProjectView(projectId);
   }
 }
 
@@ -2844,7 +2893,7 @@ async function uncompleteStep(projectId, track, order) {
   }
   if (lastCompletedStep && lastCompletedStep.projectId === projectId && lastCompletedStep.track === track && lastCompletedStep.order === order) lastCompletedStep = null;
   try { await sbUpdate('project_steps', 'id=eq.' + stepId, { status: 'pending', completed_date: null }); }
-  catch (err) { alert('Ongedaan maken mislukt: ' + err.message); openProject(projectId); }
+  catch (err) { alert('Ongedaan maken mislukt: ' + err.message); refreshProjectView(projectId); }
 }
 
 document.addEventListener('keydown', (e) => {
@@ -2948,7 +2997,7 @@ async function deleteSubtask(projectId, stepId, subId) {
 }
 
 async function deleteStepUI(projectId, stepId) {
-  if (!requireOwner()) return; if (!confirm('Deze stap verwijderen?')) return; await deleteStep(stepId); openProject(projectId); }
+  if (!requireOwner()) return; if (!confirm('Deze stap verwijderen?')) return; await deleteStep(stepId); refreshProjectView(projectId); }
 async function addStepUI(projectId, track) {
   if (!requireOwner()) return;
   const input = document.getElementById('addstep_' + track);
@@ -2968,7 +3017,7 @@ async function addStepUI(projectId, track) {
 }
 async function submitBenchmark(checkId, projectId) {
   const val = document.getElementById('bmInput_' + checkId).value; if (!val) return;
-  await updateBenchmark(checkId, Number(val)); openProject(projectId);
+  await updateBenchmark(checkId, Number(val)); refreshProjectView(projectId);
 }
 
 function setupDragDrop(listEl) {
@@ -3010,8 +3059,8 @@ function setupDragDrop(listEl) {
     listEl.insertBefore(draggedEl, items.indexOf(draggedEl) < targetIdx ? stepEl.nextSibling : stepEl);
     const orderedIds = Array.from(listEl.querySelectorAll('.step')).map(s => s.dataset.stepId);
     const projectId = listEl.dataset.project, track = listEl.dataset.track;
-    try { await reorderSteps(projectId, track, orderedIds); openProject(projectId); }
-    catch (err) { alert('Herordenen mislukt: ' + err.message); openProject(projectId); }
+    try { await reorderSteps(projectId, track, orderedIds); refreshProjectView(projectId); }
+    catch (err) { alert('Herordenen mislukt: ' + err.message); refreshProjectView(projectId); }
   });
 }
 function closeProject(fromHistory) {
