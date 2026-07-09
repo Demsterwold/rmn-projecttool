@@ -440,7 +440,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-07 01:08</div>
+<div class="build-tag">build 2026-07-09 21:20</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -2307,7 +2307,7 @@ async function saveConcept(projectId) {
 }
 
 // ================= Meeting recording & task extraction =================
-const STATUS_LABELS_MN = { recorded: 'Nog te verwerken', transcribing: 'Bezig met verwerken\u2026', ready: 'Klaar om te bekijken', applied: 'Taken toegevoegd' };
+const STATUS_LABELS_MN = { recorded: 'Nog te verwerken', transcribing: 'Bezig met verwerken\u2026 (bij lange opnames kan dit een paar minuten duren)', ready: 'Klaar om te bekijken', applied: 'Taken toegevoegd' };
 // A project's meeting list can live on its own page (meetingList_<projectId>) or embedded
 // inside a live show's Project tab (embedMeetingList_<showId>). Find whichever is present.
 function findMeetingListEl(projectId) {
@@ -2516,33 +2516,38 @@ async function processMeeting(noteId, projectId) {
     refreshMeetingList(projectId, notes);
 
     const note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0];
-    const { url: SB_URL, key: SB_KEY } = getConfig();
+    const { url: SB_URL } = getConfig();
     const audioUrl = `${SB_URL}/storage/v1/object/public/meeting-audio/${note.audio_path}`;
 
-    const transcribeRes = await fetch('/.netlify/functions/transcribe', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioUrl, language: 'nl' })
-    });
-    if (!transcribeRes.ok) throw new Error('Transcriptie-functie nog niet beschikbaar (status ' + transcribeRes.status + '). Is de serverless functie al gedeployed?');
-    const { transcript } = await transcribeRes.json();
-
-    const projectsList = await sbSelect('projects', 'select=id,name,type');
-    const tasksRes = await fetch('/.netlify/functions/extract-tasks', {
+    // Achtergrondfunctie: start het verwerken en wacht niet op het resultaat in dit verzoek zelf
+    // (nodig voor langere opnames, die anders de 10-seconden-limiet van een gewone functie raken).
+    const kickoffRes = await fetch('/.netlify/functions/process-meeting', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript, projects: projectsList, currentProjectId: projectId })
+      body: JSON.stringify({ noteId, audioUrl, projectId })
     });
-    if (!tasksRes.ok) throw new Error('Taak-extractie-functie nog niet beschikbaar (status ' + tasksRes.status + ').');
-    const { tasks, summary } = await tasksRes.json();
-
-    await sbUpdate('meeting_notes', 'id=eq.' + noteId, { transcript, proposed_tasks: tasks, summary: summary || null, status: 'ready' });
-    const notes2 = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-    refreshMeetingList(projectId, notes2);
-    showTaskReviewModal(noteId, projectId);
+    if (!kickoffRes.ok && kickoffRes.status !== 202) {
+      throw new Error('Verwerk-functie nog niet beschikbaar (status ' + kickoffRes.status + '). Is de serverless functie al gedeployed?');
+    }
+    pollMeetingStatus(noteId, projectId);
   } catch (err) {
     await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'recorded' });
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
     refreshMeetingList(projectId, notes);
     alert('Verwerken mislukt: ' + err.message);
   }
+}
+async function pollMeetingStatus(noteId, projectId, attempt) {
+  attempt = attempt || 0;
+  if (attempt > 90) return; // ~15 minuten bij 10s interval, dan stoppen we vanzelf met pollen
+  await new Promise(r => setTimeout(r, 10000));
+  let note;
+  try { note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0]; }
+  catch (e) { return; }
+  if (!note) return;
+  if (note.status === 'transcribing') { pollMeetingStatus(noteId, projectId, attempt + 1); return; }
+  const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
+  refreshMeetingList(projectId, notes);
+  if (note.status === 'ready') showTaskReviewModal(noteId, projectId);
 }
 
 async function showTaskReviewModal(noteId, projectId) {
