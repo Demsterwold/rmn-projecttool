@@ -440,7 +440,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-09 21:20</div>
+<div class="build-tag">build 2026-07-09 22:05</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -2404,6 +2404,10 @@ let __mediaRecorder = null;
 let __recordedChunks = [];
 let __recordingSeconds = 0;
 let __recordingTimer = null;
+let __chunkRotateTimer = null;
+let __uploadedChunkPaths = [];
+let __isFinalStop = false;
+const CHUNK_ROTATE_SECONDS = 18 * 60; // ruim onder de 23-minuten-limiet van het transcriptiemodel
 
 function recButtonHtml(btnId, opts) {
   const attrs = opts.projectId ? `data-project-id="${opts.projectId}"` : `data-show-id="${opts.showId}"`;
@@ -2421,6 +2425,7 @@ async function handleRecClick(btnId) {
   if (!requireOwner()) return;
   const btn = document.getElementById(btnId);
   if (__mediaRecorder && __mediaRecorder.state === 'recording') {
+    __isFinalStop = true;
     __mediaRecorder.stop();
     return;
   }
@@ -2432,26 +2437,53 @@ async function handleRecClick(btnId) {
   if (!projectId) return;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    __recordedChunks = [];
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
-    __mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    __mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) __recordedChunks.push(e.data); };
-    __mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
-      clearInterval(__recordingTimer); __recordingTimer = null;
-      setRecButtonState(btnId, false);
-      const blob = new Blob(__recordedChunks, { type: __mediaRecorder.mimeType || 'audio/webm' });
-      __mediaRecorder = null;
-      await saveRecording(projectId, blob);
-    };
-    __mediaRecorder.start();
+    __uploadedChunkPaths = [];
+    __isFinalStop = false;
     __recordingSeconds = 0;
+    startRecorderSegment(projectId, stream, btnId);
     setRecButtonState(btnId, true);
     updateRecBtnTimer(btnId);
     __recordingTimer = setInterval(() => { __recordingSeconds++; updateRecBtnTimer(btnId); }, 1000);
   } catch (err) {
     alert('Kon microfoon niet gebruiken: ' + err.message);
   }
+}
+function startRecorderSegment(projectId, stream, btnId) {
+  __recordedChunks = [];
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+  __mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  __mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) __recordedChunks.push(e.data); };
+  __mediaRecorder.onstop = async () => {
+    const blob = new Blob(__recordedChunks, { type: __mediaRecorder.mimeType || 'audio/webm' });
+    try {
+      const path = await uploadAudioChunk(projectId, blob);
+      __uploadedChunkPaths.push(path);
+    } catch (err) {
+      alert('Kon een deel van de opname niet opslaan: ' + err.message);
+    }
+    if (__isFinalStop) {
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(__recordingTimer); __recordingTimer = null;
+      clearTimeout(__chunkRotateTimer); __chunkRotateTimer = null;
+      setRecButtonState(btnId, false);
+      __mediaRecorder = null;
+      await finalizeRecording(projectId);
+    } else {
+      // meteen een nieuw stukje starten zodat er geen gat in de opname valt; onzichtbaar voor de gebruiker
+      startRecorderSegment(projectId, stream, btnId);
+      scheduleChunkRotation(btnId);
+    }
+  };
+  __mediaRecorder.start();
+  scheduleChunkRotation(btnId);
+}
+function scheduleChunkRotation(btnId) {
+  clearTimeout(__chunkRotateTimer);
+  __chunkRotateTimer = setTimeout(() => {
+    if (__mediaRecorder && __mediaRecorder.state === 'recording' && !__isFinalStop) {
+      __mediaRecorder.stop(); // triggert onstop hierboven, dat automatisch een nieuw stukje start
+    }
+  }, CHUNK_ROTATE_SECONDS * 1000);
 }
 function setRecButtonState(btnId, recording) {
   const btn = document.getElementById(btnId);
@@ -2471,18 +2503,22 @@ function updateRecBtnTimer(btnId) {
   const s = String(__recordingSeconds%60).padStart(2,'0');
   timer.textContent = m + ':' + s;
 }
-async function saveRecording(projectId, blob) {
+async function uploadAudioChunk(projectId, blob) {
+  const { url: SB_URL, key: SB_KEY } = getConfig();
+  const authToken = await getAuthToken();
+  const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
+  const filename = projectId + '_' + Date.now() + '_' + Math.floor(Math.random()*10000) + '.' + ext;
+  const uploadRes = await fetch(`${SB_URL}/storage/v1/object/meeting-audio/${filename}`, {
+    method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken, 'Content-Type': blob.type }, body: blob
+  });
+  if (!uploadRes.ok) throw new Error('Upload mislukt (' + uploadRes.status + ')');
+  return filename;
+}
+async function finalizeRecording(projectId) {
   try {
-    const { url: SB_URL, key: SB_KEY } = getConfig();
-    const authToken = await getAuthToken();
-    const ext = blob.type.includes('mp4') ? 'm4a' : 'webm';
-    const filename = projectId + '_' + Date.now() + '.' + ext;
-    const uploadRes = await fetch(`${SB_URL}/storage/v1/object/meeting-audio/${filename}`, {
-      method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken, 'Content-Type': blob.type }, body: blob
-    });
-    if (!uploadRes.ok) throw new Error('Upload mislukt (' + uploadRes.status + ')');
+    if (!__uploadedChunkPaths.length) throw new Error('Geen audio opgenomen.');
     const noteId = uid('meet');
-    await sbInsert('meeting_notes', [{ id: noteId, project_id: projectId, title: 'Meeting ' + fmtDate(new Date().toISOString()), audio_path: filename, status: 'recorded' }]);
+    await sbInsert('meeting_notes', [{ id: noteId, project_id: projectId, title: 'Meeting ' + fmtDate(new Date().toISOString()), audio_paths: __uploadedChunkPaths, status: 'recorded' }]);
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
     refreshMeetingList(projectId, notes);
   } catch (err) {
@@ -2493,12 +2529,15 @@ async function deleteMeetingNote(noteId, projectId) {
   if (!requireOwner()) return;
   if (!confirm('Deze meeting-opname verwijderen?')) return;
   try {
-    const row = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=audio_path'))[0];
+    const row = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=audio_path,audio_paths'))[0];
     await sbDelete('meeting_notes', 'id=eq.' + noteId);
-    if (row && row.audio_path) {
+    const pathsToDelete = (row && row.audio_paths && row.audio_paths.length) ? row.audio_paths : (row && row.audio_path ? [row.audio_path] : []);
+    if (pathsToDelete.length) {
       const { url: SB_URL, key: SB_KEY } = getConfig();
       const authToken = await getAuthToken();
-      await fetch(`${SB_URL}/storage/v1/object/meeting-audio/${row.audio_path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{});
+      await Promise.all(pathsToDelete.map(path =>
+        fetch(`${SB_URL}/storage/v1/object/meeting-audio/${path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{})
+      ));
     }
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
     refreshMeetingList(projectId, notes);
@@ -2515,15 +2554,12 @@ async function processMeeting(noteId, projectId) {
     const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
     refreshMeetingList(projectId, notes);
 
-    const note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0];
-    const { url: SB_URL } = getConfig();
-    const audioUrl = `${SB_URL}/storage/v1/object/public/meeting-audio/${note.audio_path}`;
-
     // Achtergrondfunctie: start het verwerken en wacht niet op het resultaat in dit verzoek zelf
     // (nodig voor langere opnames, die anders de 10-seconden-limiet van een gewone functie raken).
+    // De functie zoekt zelf de audiobestanden (mogelijk meerdere stukjes) bij deze meeting op.
     const kickoffRes = await fetch('/.netlify/functions/process-meeting', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ noteId, audioUrl, projectId })
+      body: JSON.stringify({ noteId, projectId })
     });
     if (!kickoffRes.ok && kickoffRes.status !== 202) {
       throw new Error('Verwerk-functie nog niet beschikbaar (status ' + kickoffRes.status + '). Is de serverless functie al gedeployed?');
