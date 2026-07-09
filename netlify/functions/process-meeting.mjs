@@ -2,6 +2,11 @@
 // het resultaat direct terug naar Supabase. Draait tot 15 minuten (i.p.v. 10 seconden
 // bij een gewone functie), nodig voor langere meeting-opnames.
 //
+// Lange opnames worden aan de opname-kant al automatisch in stukken van ~18 minuten
+// geknipt (audio_paths, een lijst). Elk stuk wordt apart getranscribeerd met het betere
+// gpt-4o-transcribe-model (dat een limiet van ~23 minuten per bestand heeft) en daarna
+// weer aan elkaar geplakt tot één doorlopend transcript.
+//
 // Vereiste environment variables in Netlify:
 //   OPENAI_API_KEY       - voor transcriptie
 //   ANTHROPIC_API_KEY     - voor taak-extractie
@@ -19,30 +24,46 @@ async function sbAdmin(method, path, body) {
   return text ? JSON.parse(text) : null;
 }
 
+async function transcribeOneFile(audioUrl) {
+  const audioRes = await fetch(audioUrl);
+  if (!audioRes.ok) throw new Error('Kon audio niet ophalen (' + audioRes.status + ')');
+  const audioBlob = await audioRes.blob();
+
+  const form = new FormData();
+  form.append('file', audioBlob, 'meeting.webm');
+  form.append('model', 'gpt-4o-transcribe');
+  form.append('language', 'nl');
+
+  const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY },
+    body: form
+  });
+  if (!whisperRes.ok) { const t = await whisperRes.text(); throw new Error('Transcriptie-fout: ' + t.slice(0, 300)); }
+  const { text } = await whisperRes.json();
+  return text;
+}
+
 export default async (req) => {
   let noteId;
   try {
     const body = await req.json();
     noteId = body.noteId;
-    const { audioUrl, projectId } = body;
+    const { projectId } = body;
 
-    // 1. Transcriptie
-    const audioRes = await fetch(audioUrl);
-    if (!audioRes.ok) throw new Error('Kon audio niet ophalen (' + audioRes.status + ')');
-    const audioBlob = await audioRes.blob();
+    const note = await sbAdmin('GET', 'meeting_notes?id=eq.' + noteId + '&select=audio_path,audio_paths');
+    const row = note[0] || {};
+    const paths = (row.audio_paths && row.audio_paths.length) ? row.audio_paths : (row.audio_path ? [row.audio_path] : []);
+    if (!paths.length) throw new Error('Geen audiobestand gevonden bij deze opname.');
 
-    const form = new FormData();
-    form.append('file', audioBlob, 'meeting.webm');
-    form.append('model', 'whisper-1');
-    form.append('language', 'nl');
-
-    const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + process.env.OPENAI_API_KEY },
-      body: form
-    });
-    if (!whisperRes.ok) { const t = await whisperRes.text(); throw new Error('Whisper-fout: ' + t.slice(0, 300)); }
-    const { text: transcript } = await whisperRes.json();
+    // 1. Transcriptie, per stuk, in de juiste volgorde, daarna aan elkaar plakken
+    const transcriptParts = [];
+    for (const path of paths) {
+      const audioUrl = `${SUPABASE_URL}/storage/v1/object/public/meeting-audio/${path}`;
+      const part = await transcribeOneFile(audioUrl);
+      transcriptParts.push(part);
+    }
+    const transcript = transcriptParts.join(' ');
 
     // 2. Taken + samenvatting
     const projects = await sbAdmin('GET', 'projects?select=id,name,type');
