@@ -33,7 +33,7 @@ export default async (req) => {
 
     const form = new FormData();
     form.append('file', audioBlob, 'meeting.webm');
-    form.append('model', 'gpt-4o-transcribe');
+    form.append('model', 'whisper-1');
     form.append('language', 'nl');
 
     const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
