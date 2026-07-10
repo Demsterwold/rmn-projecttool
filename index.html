@@ -123,10 +123,17 @@
   .countdown-badge.soon { color: var(--orange); border-color: var(--orange); }
   .countdown-badge.overdue { color: var(--red); border-color: var(--red); }
 
-  .tracks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0 28px; align-items: start; }
-  .tracks.single { grid-template-columns: 1fr; max-width: 460px; }
-  @media (max-width: 800px) { .tracks { grid-template-columns: 1fr; } }
-  .track-col { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+  .tracks { display: flex; align-items: flex-start; gap: 16px; margin: 24px 0 28px; position: relative; }
+  .tracks.single .tracks-lists { columns: 1; max-width: 460px; }
+  .tracks-lists { columns: 260px; column-gap: 16px; flex: 1; min-width: 0; }
+  .tracks-files { width: 280px; flex-shrink: 0; }
+  @media (max-width: 800px) { .tracks { flex-direction: column; } .tracks-files { width: 100%; } }
+  .track-col { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; break-inside: avoid; margin-bottom: 16px; }
+  .track-col[draggable="true"] .track-head { cursor: grab; }
+  .track-col.dragging { opacity: 0.4; }
+  .track-col.drag-over { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .add-track-btn { position: sticky; top: 12px; flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel); color: var(--text-faint); font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .add-track-btn:hover { color: var(--text); border-color: var(--accent); }
   .track-head { padding: 12px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .track-head-left { display: flex; align-items: center; gap: 8px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -135,9 +142,38 @@
   .track-start-edit:hover { color: var(--text); }
 
   .step-list { display: flex; flex-direction: column; }
-  .step { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; display: flex; align-items: flex-start; gap: 8px; cursor: grab; }
+  .step { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 13px; display: flex; align-items: flex-start; gap: 8px; cursor: grab; position: relative; overflow: hidden; }
   .step.dragging { opacity: 0.4; }
   .step.drag-over { border-top: 2px solid var(--accent); }
+
+  /* Bestanden-paneel */
+  .file-list { display: flex; flex-direction: column; }
+  .file-row { padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .file-row:last-child { border-bottom: none; }
+  .file-row-main { flex: 1; min-width: 0; }
+  .file-row-name { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-row-name:hover { color: var(--accent); }
+  .file-row-meta { font-size: 10px; color: var(--text-faint); margin-top: 2px; }
+  .file-row-delete { border: none; background: none; color: var(--text-faint); font-size: 14px; padding: 2px 4px; cursor: pointer; flex-shrink: 0; }
+  .file-row-delete:hover { color: var(--red); }
+  .file-empty { padding: 14px 16px; font-size: 12px; color: var(--text-faint); }
+  .file-drop-row { padding: 10px 12px; }
+  .file-drop-label { display: block; border: 1.5px dashed var(--border); border-radius: 8px; padding: 10px; text-align: center; font-size: 11px; color: var(--text-faint); cursor: pointer; }
+  .file-drop-label:hover, .file-drop-label.drag-active { border-color: var(--accent); color: var(--accent); }
+  .file-drop-label input[type="file"] { display: none; }
+  .file-viewer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; flex-direction: column; }
+  .file-viewer-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .file-viewer-bar button { font-size: 13px; }
+  .file-viewer-frame { flex: 1; border: none; background: #fff; }
+
+  /* Uitschuifpaneel per taak (verschijnt alleen bij hoveren over de rechterrand) */
+  .step-hover-zone { position: absolute; top: 0; right: 0; bottom: 0; width: 24px; z-index: 1; }
+  .step-slide-panel { position: absolute; top: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 2px; padding: 0 6px; background: linear-gradient(to right, transparent, var(--panel) 22%); transform: translateX(100%); transition: transform 0.16s ease; z-index: 2; }
+  .step-hover-zone:hover ~ .step-slide-panel, .step-slide-panel:hover { transform: translateX(0); }
+  .step-slide-panel button { border: none; background: transparent; padding: 3px 5px; font-size: 12px; color: var(--text-faint); }
+  .step-slide-panel button:hover { color: var(--text); }
+  .step-slide-panel button.has-link { color: var(--accent); }
+  .step-link-chip { font-size: 10px; color: var(--accent); text-decoration: none; margin-top: 2px; display: inline-block; }
   .step:hover .step-actions { opacity: 1; }
   .step:last-child { border-bottom: none; }
   .step-check { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--text-faint); flex-shrink: 0; margin-top: 1px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: all 0.12s; }
@@ -440,7 +476,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-09 22:05</div>
+<div class="build-tag">build 2026-07-10 00:15</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -1561,17 +1597,21 @@ function embeddedProjectShellHtml(showId) {
       <button class="detail-tab-btn" id="embedTabBtn_meetings_${showId}" onclick="switchEmbedTab('${showId}','meetings')">Meetings</button>
     </div>
     <div id="embedTabContent_overzicht_${showId}" class="detail-tab-content">
-      <div class="tracks single">
-        <div class="track-col">
-          <div class="track-head"><div class="track-head-left"><span class="dot" style="background:#8a7fd9"></span>To-do's</div></div>
-          <div class="step-list" id="embedSteplist_${showId}" data-show="${showId}">
-            <div class="state-msg">Laden\u2026</div>
-          </div>
-          <div class="add-step-row">
-            <input type="text" placeholder="+ taak toevoegen" id="embedAddstep_${showId}" onkeydown="if(event.key==='Enter') addStepToShow('${showId}')">
-            <button class="small" onclick="addStepToShow('${showId}')">Toevoegen</button>
+      <div class="tracks">
+        <div class="tracks-lists" id="embedTracksLists_${showId}">
+          <div class="track-col">
+            <div class="track-head"><div class="track-head-left"><span class="dot" style="background:#8a7fd9"></span>To-do's</div></div>
+            <div class="step-list" id="embedSteplist_${showId}" data-show="${showId}">
+              <div class="state-msg">Laden\u2026</div>
+            </div>
+            <div class="add-step-row">
+              <input type="text" placeholder="+ taak toevoegen" id="embedAddstep_${showId}" onkeydown="if(event.key==='Enter') addStepToShow('${showId}')">
+              <button class="small" onclick="addStepToShow('${showId}')">Toevoegen</button>
+            </div>
           </div>
         </div>
+        <button class="add-track-btn" title="Extra lijst toevoegen" onclick="addTrackToShowUI('${showId}')">+</button>
+        <div class="tracks-files" id="embedFilesWrap_${showId}"></div>
       </div>
     </div>
     <div id="embedTabContent_meetings_${showId}" class="detail-tab-content hidden">
@@ -1588,14 +1628,15 @@ function switchEmbedTab(showId, tabName) {
   });
 }
 // Resolves (creating if needed) the linked project, then fills the already-visible shell
-// with the real to-do list and meeting list. Any failure here only affects these two
+// with the real tracks, to-do's, files, and meeting list. Any failure here only affects these
 // inner areas, never the shell itself.
 async function loadEmbeddedProjectData(showId) {
-  const stepListEl = document.getElementById('embedSteplist_' + showId);
+  const tracksListsEl = document.getElementById('embedTracksLists_' + showId);
+  const filesWrapEl = document.getElementById('embedFilesWrap_' + showId);
   const meetingListEl = document.getElementById('embedMeetingList_' + showId);
   if (!isOwner) {
     const msg = '<div class="state-msg">Ontgrendel met Face ID/Touch ID (het slotje rechtsboven) om taken en meetings te zien.<br><button class="small" onclick="loadEmbeddedProjectData(\'' + showId + '\')">Opnieuw proberen</button></div>';
-    if (stepListEl) stepListEl.innerHTML = msg;
+    if (tracksListsEl) tracksListsEl.innerHTML = msg;
     if (meetingListEl) meetingListEl.innerHTML = msg;
     return;
   }
@@ -1603,27 +1644,72 @@ async function loadEmbeddedProjectData(showId) {
     const linkedId = await ensureLinkedProject(showId);
     window.__showLinkedProject = window.__showLinkedProject || {};
     window.__showLinkedProject[showId] = linkedId;
-    const [steps, meetingNotes] = await Promise.all([
+    const [proj, steps, meetingNotes, projectFiles] = await Promise.all([
+      sbSelect('projects', 'id=eq.' + linkedId + '&select=track_order,custom_tracks'),
       sbSelect('project_steps', 'project_id=eq.' + linkedId + '&select=*&order=order_num.asc'),
-      sbSelect('meeting_notes', 'project_id=eq.' + linkedId + '&select=*&order=created_at.desc')
+      sbSelect('meeting_notes', 'project_id=eq.' + linkedId + '&select=*&order=created_at.desc'),
+      sbSelect('project_files', 'project_id=eq.' + linkedId + '&select=*&order=uploaded_at.desc').catch(() => [])
     ]);
-    if (stepListEl) {
-      stepListEl.innerHTML = sortForDisplay(steps).map(s => stepHtml(linkedId, s, true)).join('') || '<div class="state-msg" style="padding:10px 0;">Nog geen taken.</div>';
-      setupDragDrop(stepListEl);
+    const p = proj[0] || {};
+    const customTracks = Array.isArray(p.custom_tracks) ? p.custom_tracks : [];
+    const customTrackIds = customTracks.map(t => t.id);
+    const savedOrder = Array.isArray(p.track_order) ? p.track_order.filter(k => k === 'taken' || customTrackIds.includes(k)) : [];
+    const allKnownKeys = ['taken', ...customTrackIds];
+    const trackOrder = [...savedOrder, ...allKnownKeys.filter(k => !savedOrder.includes(k))];
+    const customTrackMap = {}; customTracks.forEach(t => customTrackMap[t.id] = t.name);
+
+    if (tracksListsEl) {
+      tracksListsEl.innerHTML = trackOrder.map(key => {
+        const isCustom = key !== 'taken';
+        const label = isCustom ? (customTrackMap[key] || 'Lijst') : "To-do's";
+        const color = isCustom ? '#8fa3c9' : '#8a7fd9';
+        const trackSteps = steps.filter(s => s.track === key);
+        return `
+          <div class="track-col" draggable="true" data-track-key="${key}">
+            <div class="track-head">
+              <div class="track-head-left"><span class="dot" style="background:${color}"></span>${escapeHtml(label)}</div>
+              ${isCustom ? `<button class="ghost" style="padding:2px 6px; font-size:13px;" title="Lijst verwijderen" onclick="event.stopPropagation(); removeTrackFromShowUI('${showId}','${key}')">\u00d7</button>` : ''}
+            </div>
+            <div class="step-list" id="embedSteplist_${showId}_${key}" data-track="${key}" data-project="${linkedId}">
+              ${sortForDisplay(trackSteps).map(s => stepHtml(linkedId, s, true)).join('') || ''}
+            </div>
+            <div class="add-step-row">
+              <input type="text" placeholder="+ taak toevoegen" id="embedAddstep_${showId}_${key}" onkeydown="if(event.key==='Enter') addStepToShow('${showId}','${key}')">
+              <button class="small" onclick="addStepToShow('${showId}','${key}')">Toevoegen</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      trackOrder.forEach(key => setupDragDrop(document.getElementById('embedSteplist_' + showId + '_' + key)));
+      setupTracksDragDrop(tracksListsEl, linkedId);
     }
+    if (filesWrapEl) filesWrapEl.innerHTML = filesColHtml(linkedId, projectFiles || []);
     const meetingTabBtn = document.getElementById('embedTabBtn_meetings_' + showId);
     if (meetingTabBtn) meetingTabBtn.textContent = 'Meetings' + (meetingNotes.length ? ' (' + meetingNotes.length + ')' : '');
     if (meetingListEl) meetingListEl.innerHTML = meetingNotesListHtml(linkedId, meetingNotes);
   } catch (err) {
     console.error('loadEmbeddedProjectData error:', err);
     const msg = `<div class="state-msg">Kon niet laden (${escapeHtml(err.message)}).<br><button class="small" onclick="loadEmbeddedProjectData('${showId}')">Opnieuw proberen</button></div>`;
-    if (stepListEl) stepListEl.innerHTML = msg;
+    if (tracksListsEl) tracksListsEl.innerHTML = msg;
     if (meetingListEl) meetingListEl.innerHTML = msg;
   }
 }
-async function addStepToShow(showId) {
+async function addTrackToShowUI(showId) {
   if (!requireOwner()) return;
-  const input = document.getElementById('embedAddstep_' + showId);
+  const linkedId = (window.__showLinkedProject && window.__showLinkedProject[showId]) || await ensureLinkedProject(showId);
+  await addTrackUI(linkedId);
+  loadEmbeddedProjectData(showId);
+}
+async function removeTrackFromShowUI(showId, trackKey) {
+  const linkedId = (window.__showLinkedProject && window.__showLinkedProject[showId]) || await ensureLinkedProject(showId);
+  await removeTrackUI(linkedId, trackKey);
+  loadEmbeddedProjectData(showId);
+}
+async function addStepToShow(showId, track) {
+  if (!requireOwner()) return;
+  track = track || 'taken';
+  const input = document.getElementById('embedAddstep_' + showId + '_' + track) || document.getElementById('embedAddstep_' + showId);
+  if (!input) return;
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
@@ -1631,7 +1717,7 @@ async function addStepToShow(showId) {
     const linkedId = (window.__showLinkedProject && window.__showLinkedProject[showId]) || await ensureLinkedProject(showId);
     window.__showLinkedProject = window.__showLinkedProject || {};
     window.__showLinkedProject[showId] = linkedId;
-    await addStep(linkedId, 'taken', text);
+    await addStep(linkedId, track, text);
     await loadEmbeddedProjectData(showId);
   } catch (err) {
     alert('Kon taak niet toevoegen: ' + err.message);
@@ -2354,7 +2440,7 @@ function findEmbeddedShowIdForProject(projectId) {
 }
 function refreshProjectView(projectId) {
   const embeddedShowId = findEmbeddedShowIdForProject(projectId);
-  if (embeddedShowId && document.getElementById('embedSteplist_' + embeddedShowId)) {
+  if (embeddedShowId && document.getElementById('embedTracksLists_' + embeddedShowId)) {
     loadEmbeddedProjectData(embeddedShowId);
   } else {
     openProject(projectId);
@@ -2658,14 +2744,15 @@ async function openProject(projectId, isShared, fromHistory) {
   const detail = document.getElementById('detailView');
   detail.classList.remove('hidden');
   detail.innerHTML = '<div class="state-msg">Laden\u2026</div>';
-  let p, steps, benchmarks, stats, meetingNotes;
+  let p, steps, benchmarks, stats, meetingNotes, projectFiles;
   try {
-    [p, steps, benchmarks, stats, meetingNotes] = await Promise.all([
+    [p, steps, benchmarks, stats, meetingNotes, projectFiles] = await Promise.all([
       sbSelect('projects', 'id=eq.' + projectId + '&select=*').then(r => r[0]),
       sbSelect('project_steps', 'project_id=eq.' + projectId + '&select=*&order=order_num.asc'),
       sbSelect('benchmark_checks', 'project_id=eq.' + projectId + '&select=*&order=week_number.asc'),
       sbSelect('podcast_stats', 'project_id=eq.' + projectId + '&select=*&order=week_number.asc'),
-      sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc')
+      sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc'),
+      sbSelect('project_files', 'project_id=eq.' + projectId + '&select=*&order=uploaded_at.desc').catch(() => [])
     ]);
   } catch (e) {
     detail.innerHTML = `<div class="state-msg">Kon project niet laden (${escapeHtml(e.message)}).<br><button class="small" onclick="openProject('${projectId}', ${!!isShared})">Opnieuw proberen</button></div>`;
@@ -2673,6 +2760,15 @@ async function openProject(projectId, isShared, fromHistory) {
   }
   if (!p) { detail.innerHTML = '<div class="state-msg">Project niet gevonden.</div>'; return; }
   const isOverig = p.type === 'overig';
+  const defaultTrackOrder = isOverig ? ['taken'] : ['productie','marketing','distributie','algemeen'];
+  const customTracks = Array.isArray(p.custom_tracks) ? p.custom_tracks : [];
+  const customTrackIds = customTracks.map(t => t.id);
+  const savedOrder = Array.isArray(p.track_order) ? p.track_order.filter(k => defaultTrackOrder.includes(k) || customTrackIds.includes(k)) : [];
+  // volledige, geldige volgorde: opgeslagen volgorde eerst, dan eventuele nieuwe lijsten die nog niet in de opgeslagen volgorde zaten
+  const allKnownKeys = [...defaultTrackOrder, ...customTrackIds];
+  const trackOrder = [...savedOrder, ...allKnownKeys.filter(k => !savedOrder.includes(k))];
+  const customTrackMap = {}; customTracks.forEach(t => customTrackMap[t.id] = t.name);
+
   const tracks = {
     productie: steps.filter(s=>s.track==='productie'),
     marketing: steps.filter(s=>s.track==='marketing'),
@@ -2683,15 +2779,21 @@ async function openProject(projectId, isShared, fromHistory) {
 
   const isTrackUnlocked = (track) => true;
 
-  const trackHtml = (track, trackSteps, algemeenSteps) => {
+  const trackHtml = (track, trackSteps) => {
+    const isCustom = !defaultTrackOrder.includes(track);
+    const label = isCustom ? (customTrackMap[track] || 'Lijst') : TRACK_LABELS[track];
+    const color = isCustom ? '#8fa3c9' : TRACK_COLORS[track];
     const splitMeeting = (track === 'productie' || track === 'marketing');
     const regularSteps = splitMeeting ? trackSteps.filter(s => !s.from_meeting) : trackSteps;
     const meetingSteps = splitMeeting ? trackSteps.filter(s => s.from_meeting) : [];
     return `
-    <div class="track-col">
+    <div class="track-col" draggable="true" data-track-key="${track}">
       <div class="track-head">
-        <div class="track-head-left"><span class="dot" style="background:${TRACK_COLORS[track]}"></span>${TRACK_LABELS[track]}</div>
-        ${(track==='marketing'||track==='distributie') ? `<button class="track-start-edit" onclick="promptTrackStartDate('${projectId}','${track}','${track==='marketing'?(p.marketing_start_date||''):(p.distributie_start_date||'')}')">start \u270e</button>` : ''}
+        <div class="track-head-left"><span class="dot" style="background:${color}"></span>${escapeHtml(label)}</div>
+        <div style="display:flex; align-items:center; gap:2px;">
+          ${(track==='marketing'||track==='distributie') ? `<button class="track-start-edit" onclick="event.stopPropagation(); promptTrackStartDate('${projectId}','${track}','${track==='marketing'?(p.marketing_start_date||''):(p.distributie_start_date||'')}')">start \u270e</button>` : ''}
+          ${isCustom ? `<button class="ghost" style="padding:2px 6px; font-size:13px;" title="Lijst verwijderen" onclick="event.stopPropagation(); removeTrackUI('${projectId}','${track}')">\u00d7</button>` : ''}
+        </div>
       </div>
       <div class="step-list" id="steplist_${track}" data-track="${track}" data-project="${projectId}">
         ${sortForDisplay(regularSteps).map(s => stepHtml(projectId, s, isTrackUnlocked(track))).join('')}
@@ -2705,18 +2807,6 @@ async function openProject(projectId, isShared, fromHistory) {
         <div class="meeting-tasks-subhead">\u{1F399}\uFE0F Vanuit meetings</div>
         <div class="step-list" id="steplist_${track}_meeting" data-track="${track}" data-project="${projectId}">
           ${sortForDisplay(meetingSteps).map(s => stepHtml(projectId, s, isTrackUnlocked(track))).join('')}
-        </div>
-      ` : ''}
-      ${algemeenSteps ? `
-        <div class="algemeen-subblock">
-          <div class="track-head"><div class="track-head-left"><span class="dot" style="background:${TRACK_COLORS.algemeen}"></span>Algemeen</div></div>
-          <div class="step-list" id="steplist_algemeen" data-track="algemeen" data-project="${projectId}">
-            ${sortForDisplay(algemeenSteps).map(s => stepHtml(projectId, s, true)).join('')}
-          </div>
-          <div class="add-step-row">
-            <input type="text" placeholder="+ stap toevoegen" id="addstep_algemeen" onkeydown="if(event.key==='Enter') addStepUI('${projectId}','algemeen')">
-            <button class="small" onclick="addStepUI('${projectId}','algemeen')">Toevoegen</button>
-          </div>
         </div>
       ` : ''}
     </div>
@@ -2789,7 +2879,11 @@ async function openProject(projectId, isShared, fromHistory) {
         <textarea id="conceptInput_${p.id}" placeholder="Waar gaat deze podcast over, en voor wie is die bedoeld?" onblur="saveConcept('${p.id}')">${escapeHtml(p.concept || '')}</textarea>
       </div>
       <div class="tracks ${isOverig ? 'single' : ''}">
-        ${isOverig ? trackHtml('taken', tracks.taken) : trackHtml('productie', tracks.productie, tracks.algemeen) + trackHtml('marketing', tracks.marketing) + trackHtml('distributie', tracks.distributie)}
+        <div class="tracks-lists" id="tracksLists_${p.id}">
+          ${trackOrder.map(key => trackHtml(key, tracks[key] || steps.filter(s => s.track === key))).join('')}
+        </div>
+        ${isShared ? '' : `<button class="add-track-btn" title="Extra lijst toevoegen" onclick="addTrackUI('${p.id}')">+</button>`}
+        ${isShared ? '' : `<div class="tracks-files">${filesColHtml(p.id, projectFiles || [])}</div>`}
       </div>
       ${benchmarkHtml}
     </div>
@@ -2808,7 +2902,10 @@ async function openProject(projectId, isShared, fromHistory) {
       markers: trackSteps.filter(s=>s.due_date).map(s => ({date: new Date(s.due_date), label: s.step_name, color: s.status==='done'?'#4caf7d':'#e0a63a'})) };
   });
   renderTimeline('detailTimeline', tlRows);
-  trackKeys.forEach(track => setupDragDrop(document.getElementById('steplist_' + track)));
+  if (!isShared) {
+    trackOrder.forEach(track => setupDragDrop(document.getElementById('steplist_' + track)));
+    setupTracksDragDrop(document.getElementById('tracksLists_' + p.id), p.id);
+  }
 }
 
 function stepHtml(projectId, s, trackUnlocked) {
@@ -2820,18 +2917,22 @@ function stepHtml(projectId, s, trackUnlocked) {
   const allSubDone = subtasks.every(st => st.done);
   const blocked = s.status !== 'done' && subtasks.length > 0 && !allSubDone;
   const prio = s.priority || '';
+  const hasLink = !!(s.link_url && s.link_url.trim());
   return `
     <div class="step ${cls} prio-${prio||'none'}" draggable="true" data-step-id="${s.id}">
       <div class="step-check ${blocked?'blocked':''}" ${clickable ? `onclick="toggleStepClick('${projectId}','${s.track}',${s.order_num})"` : ''} title="${blocked ? 'Rond eerst alle subtaken af' : ''}">${s.status === 'done' ? '\u2713' : ''}</div>
       <div class="step-main">
         <div class="step-name" id="stepname_${s.id}">${escapeHtml(s.step_name)}</div>
         ${s.due_date ? `<div class="step-due">${fmtDate(s.due_date)}</div>` : ''}
+        ${hasLink ? `<a class="step-link-chip" href="${escapeHtml(s.link_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">\u{1F517} ${escapeHtml(s.link_url.replace(/^https?:\/\//,'').slice(0,40))}</a>` : ''}
         <div id="notewrap_${s.id}">${hasNote ? `<div class="step-note-text" onclick="startEditNote('${s.id}')">${escapeHtml(s.note)}</div>` : ''}</div>
         <div id="subtasks_${s.id}">${subtasks.length ? subtaskListHtml(projectId, s.id, subtasks) : ''}</div>
         <div id="images_${s.id}" class="step-images">${imageListHtml(projectId, s.id, images)}</div>
       </div>
-      <button class="prio-flag prio-${prio||'none'}" title="Prioriteit instellen" onclick="cyclePriority('${projectId}','${s.id}','${prio}')">\u2691</button>
-      <div class="step-actions">
+      <div class="step-hover-zone"></div>
+      <div class="step-slide-panel">
+        <button class="prio-flag prio-${prio||'none'}" title="Prioriteit instellen" onclick="cyclePriority('${projectId}','${s.id}','${prio}')">\u2691</button>
+        <button class="${hasLink?'has-link':''}" title="${hasLink?'Link aanpassen':'Link toevoegen'}" onclick="promptStepLink('${projectId}','${s.id}','${escapeHtml(s.link_url||'').replace(/'/g,"&#39;")}')">\u{1F517}</button>
         <button title="Afbeelding toevoegen" onclick="triggerImageUpload('${projectId}','${s.id}')">\u{1F4F7}</button>
         <input type="file" accept="image/*" class="hidden" id="imgfile_${s.id}" onchange="handleImageSelected('${projectId}','${s.id}')">
         <button title="Subtaak toevoegen" onclick="showSubtaskInput('${projectId}','${s.id}')">+</button>
@@ -2934,6 +3035,189 @@ async function cyclePriority(projectId, stepId, current) {
       flagBtn.setAttribute('onclick', `cyclePriority('${projectId}','${stepId}','${next}')`);
     }
   }
+}
+async function promptStepLink(projectId, stepId, current) {
+  if (!requireOwner()) return;
+  let url = prompt('Link (URL) voor deze taak:', current || '');
+  if (url === null) return;
+  url = url.trim();
+  if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+  try {
+    await sbUpdate('project_steps', 'id=eq.' + stepId, { link_url: url || null });
+    refreshProjectView(projectId);
+  } catch (err) {
+    alert('Kon link niet opslaan: ' + err.message);
+  }
+}
+
+// ---- Sleepbare lijsten (kolommen): volgorde verplaatsen, eigen lijsten toevoegen/verwijderen ----
+function setupTracksDragDrop(listsEl, projectId) {
+  if (!listsEl) return;
+  let draggedKey = null;
+  listsEl.querySelectorAll('.track-col[draggable="true"]').forEach(col => {
+    col.addEventListener('dragstart', () => { draggedKey = col.dataset.trackKey; col.classList.add('dragging'); });
+    col.addEventListener('dragend', () => { col.classList.remove('dragging'); listsEl.querySelectorAll('.track-col').forEach(c => c.classList.remove('drag-over')); });
+    col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drag-over'); });
+    col.addEventListener('dragleave', () => { col.classList.remove('drag-over'); });
+    col.addEventListener('drop', async (e) => {
+      e.preventDefault(); col.classList.remove('drag-over');
+      const targetKey = col.dataset.trackKey;
+      if (!draggedKey || draggedKey === targetKey) return;
+      const cols = Array.from(listsEl.querySelectorAll('.track-col'));
+      const draggedEl = cols.find(c => c.dataset.trackKey === draggedKey);
+      if (!draggedEl) return;
+      const targetIdx = cols.indexOf(col);
+      listsEl.insertBefore(draggedEl, cols.indexOf(draggedEl) < targetIdx ? col.nextSibling : col);
+      const newOrder = Array.from(listsEl.querySelectorAll('.track-col')).map(c => c.dataset.trackKey);
+      try {
+        await sbUpdate('projects', 'id=eq.' + projectId, { track_order: newOrder });
+      } catch (err) {
+        alert('Volgorde onthouden mislukt: ' + err.message);
+      }
+    });
+  });
+}
+async function addTrackUI(projectId) {
+  if (!requireOwner()) return;
+  const name = prompt('Naam voor de nieuwe lijst:');
+  if (!name || !name.trim()) return;
+  try {
+    const p = await sbSelect('projects', 'id=eq.' + projectId + '&select=custom_tracks,track_order').then(r => r[0]);
+    const customTracks = Array.isArray(p.custom_tracks) ? p.custom_tracks.slice() : [];
+    const newId = uid('track');
+    customTracks.push({ id: newId, name: name.trim() });
+    const trackOrder = Array.isArray(p.track_order) ? p.track_order.slice() : [];
+    trackOrder.push(newId);
+    await sbUpdate('projects', 'id=eq.' + projectId, { custom_tracks: customTracks, track_order: trackOrder });
+    openProject(projectId);
+  } catch (err) {
+    alert('Lijst toevoegen mislukt: ' + err.message);
+  }
+}
+async function removeTrackUI(projectId, trackKey) {
+  if (!requireOwner()) return;
+  const stepsInTrack = await sbSelect('project_steps', 'project_id=eq.' + projectId + '&track=eq.' + trackKey + '&select=id');
+  const warn = stepsInTrack.length ? ` Taken in deze lijst (${stepsInTrack.length}) worden verplaatst naar "Algemeen"/"To-do's".` : '';
+  if (!confirm('Deze lijst verwijderen?' + warn)) return;
+  try {
+    if (stepsInTrack.length) {
+      const p = await sbSelect('projects', 'id=eq.' + projectId + '&select=type').then(r => r[0]);
+      const fallbackTrack = p.type === 'overig' ? 'taken' : 'algemeen';
+      for (const s of stepsInTrack) await sbUpdate('project_steps', 'id=eq.' + s.id, { track: fallbackTrack });
+    }
+    const proj = await sbSelect('projects', 'id=eq.' + projectId + '&select=custom_tracks,track_order').then(r => r[0]);
+    const customTracks = (Array.isArray(proj.custom_tracks) ? proj.custom_tracks : []).filter(t => t.id !== trackKey);
+    const trackOrder = (Array.isArray(proj.track_order) ? proj.track_order : []).filter(k => k !== trackKey);
+    await sbUpdate('projects', 'id=eq.' + projectId, { custom_tracks: customTracks, track_order: trackOrder });
+    openProject(projectId);
+  } catch (err) {
+    alert('Lijst verwijderen mislukt: ' + err.message);
+  }
+}
+
+// ---- Bestanden per project: uploaden en inline bekijken (niet downloaden) ----
+function filesColHtml(projectId, files) {
+  return `
+    <div class="track-col">
+      <div class="track-head"><div class="track-head-left">\u{1F4CE} Bestanden</div></div>
+      <div class="file-list" id="filelist_${projectId}">
+        ${files.length ? files.map(f => fileRowHtml(projectId, f)).join('') : '<div class="file-empty">Nog geen bestanden</div>'}
+      </div>
+      <div class="file-drop-row">
+        <label class="file-drop-label" id="fileDropLabel_${projectId}" ondragover="event.preventDefault(); this.classList.add('drag-active')" ondragleave="this.classList.remove('drag-active')" ondrop="handleFileDrop(event,'${projectId}')">
+          + Bestand uploaden of slepen (script, draaiboek\u2026)
+          <input type="file" id="fileInput_${projectId}" onchange="handleFileInputChange('${projectId}')">
+        </label>
+      </div>
+    </div>
+  `;
+}
+function fileRowHtml(projectId, f) {
+  const kb = f.size_bytes ? Math.round(f.size_bytes / 1024) : null;
+  const sizeLabel = kb ? (kb > 1024 ? Math.round(kb/1024*10)/10 + ' MB' : kb + ' KB') : '';
+  return `
+    <div class="file-row" data-file-id="${f.id}">
+      <div class="file-row-main">
+        <div class="file-row-name" onclick="openProjectFile('${escapeHtml(f.storage_path)}','${escapeHtml(f.file_name).replace(/'/g,"&#39;")}')" title="${escapeHtml(f.file_name)}">${escapeHtml(f.file_name)}</div>
+        ${sizeLabel ? `<div class="file-row-meta">${sizeLabel}</div>` : ''}
+      </div>
+      <button class="file-row-delete" title="Verwijderen" onclick="deleteProjectFile('${f.id}','${projectId}')">\u00d7</button>
+    </div>
+  `;
+}
+function triggerFileUpload(projectId) {
+  if (!requireOwner()) return;
+  document.getElementById('fileInput_' + projectId).click();
+}
+async function handleFileInputChange(projectId) {
+  const input = document.getElementById('fileInput_' + projectId);
+  const file = input.files[0];
+  if (!file) return;
+  await uploadProjectFile(projectId, file);
+  input.value = '';
+}
+async function handleFileDrop(event, projectId) {
+  event.preventDefault();
+  document.getElementById('fileDropLabel_' + projectId).classList.remove('drag-active');
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  await uploadProjectFile(projectId, file);
+}
+async function uploadProjectFile(projectId, file) {
+  if (!requireOwner()) return;
+  try {
+    const { url: SB_URL, key: SB_KEY } = getConfig();
+    const authToken = await getAuthToken();
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const storageFilename = projectId + '_' + Date.now() + (ext ? '.' + ext : '');
+    const uploadRes = await fetch(`${SB_URL}/storage/v1/object/project-files/${storageFilename}`, {
+      method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken, 'Content-Type': file.type || 'application/octet-stream' }, body: file
+    });
+    if (!uploadRes.ok) throw new Error('Upload mislukt (' + uploadRes.status + ')');
+    await sbInsert('project_files', [{ id: uid('file'), project_id: projectId, file_name: file.name, storage_path: storageFilename, file_type: file.type || null, size_bytes: file.size }]);
+    const files = await sbSelect('project_files', 'project_id=eq.' + projectId + '&select=*&order=uploaded_at.desc');
+    const listEl = document.getElementById('filelist_' + projectId);
+    if (listEl) listEl.innerHTML = files.length ? files.map(f => fileRowHtml(projectId, f)).join('') : '<div class="file-empty">Nog geen bestanden</div>';
+  } catch (err) {
+    alert('Bestand uploaden mislukt: ' + err.message);
+  }
+}
+async function deleteProjectFile(fileId, projectId) {
+  if (!requireOwner()) return;
+  if (!confirm('Dit bestand verwijderen?')) return;
+  try {
+    const row = (await sbSelect('project_files', 'id=eq.' + fileId + '&select=storage_path'))[0];
+    await sbDelete('project_files', 'id=eq.' + fileId);
+    if (row && row.storage_path) {
+      const { url: SB_URL, key: SB_KEY } = getConfig();
+      const authToken = await getAuthToken();
+      await fetch(`${SB_URL}/storage/v1/object/project-files/${row.storage_path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{});
+    }
+    const files = await sbSelect('project_files', 'project_id=eq.' + projectId + '&select=*&order=uploaded_at.desc');
+    const listEl = document.getElementById('filelist_' + projectId);
+    if (listEl) listEl.innerHTML = files.length ? files.map(f => fileRowHtml(projectId, f)).join('') : '<div class="file-empty">Nog geen bestanden</div>';
+  } catch (err) {
+    alert('Verwijderen mislukt: ' + err.message);
+  }
+}
+function openProjectFile(storagePath, fileName) {
+  const { url: SB_URL } = getConfig();
+  const fileUrl = `${SB_URL}/storage/v1/object/public/project-files/${storagePath}`;
+  const ext = (fileName.split('.').pop() || '').toLowerCase();
+  const nativelyViewable = ['pdf','png','jpg','jpeg','gif','webp','svg','txt','md'].includes(ext);
+  const viewerSrc = nativelyViewable ? fileUrl : `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(fileUrl)}`;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'file-viewer-backdrop';
+  backdrop.innerHTML = `
+    <div class="file-viewer-bar">
+      <span>${escapeHtml(fileName)}</span>
+      <button class="ghost" id="fileViewerClose">\u2715 Sluiten</button>
+    </div>
+    <iframe class="file-viewer-frame" src="${viewerSrc}"></iframe>
+  `;
+  document.body.appendChild(backdrop);
+  document.getElementById('fileViewerClose').onclick = () => backdrop.remove();
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
 }
 
 let lastCompletedStep = null;
