@@ -476,7 +476,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-10 00:15</div>
+<div class="build-tag">build 2026-07-13 11:05</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -881,8 +881,8 @@ async function createProject(name, frequency, color, startD, launchD, type) {
   return id;
 }
 
-async function markStepDone(projectId, track, orderNum) {
-  const stepId = projectId + '_' + track + '_' + orderNum;
+async function markStepDone(projectId, track, orderNum, realStepId) {
+  const stepId = realStepId || (projectId + '_' + track + '_' + orderNum);
   await sbUpdate('project_steps', 'id=eq.' + stepId, { status: 'done', completed_date: new Date().toISOString(), reminder_pending: false });
 
   if (track === 'productie' && orderNum === 4) {
@@ -921,6 +921,7 @@ async function addToLiveShows(projectId) {
 
 async function addStep(projectId, track, stepName, fromMeeting) {
   if (!requireOwner()) return;
+  if (!projectId || !track) { throw new Error('Kon taak niet aanmaken: projectId of track ontbreekt.'); }
   const steps = await sbSelect('project_steps', 'project_id=eq.' + projectId + '&track=eq.' + track + '&select=order_num&order=order_num.desc&limit=1');
   const maxOrder = steps.length ? steps[0].order_num : 0;
   const newOrder = maxOrder + 1;
@@ -2920,7 +2921,7 @@ function stepHtml(projectId, s, trackUnlocked) {
   const hasLink = !!(s.link_url && s.link_url.trim());
   return `
     <div class="step ${cls} prio-${prio||'none'}" draggable="true" data-step-id="${s.id}">
-      <div class="step-check ${blocked?'blocked':''}" draggable="false" ${clickable ? `onclick="toggleStepClick('${projectId}','${s.track}',${s.order_num})"` : ''} title="${blocked ? 'Rond eerst alle subtaken af' : ''}">${s.status === 'done' ? '\u2713' : ''}</div>
+      <div class="step-check ${blocked?'blocked':''}" ${clickable ? `onclick="toggleStepClick('${projectId}','${s.track}',${s.order_num},'${s.id}')"` : ''} title="${blocked ? 'Rond eerst alle subtaken af' : ''}">${s.status === 'done' ? '\u2713' : ''}</div>
       <div class="step-main">
         <div class="step-name" id="stepname_${s.id}">${escapeHtml(s.step_name)}</div>
         ${s.due_date ? `<div class="step-due">${fmtDate(s.due_date)}</div>` : ''}
@@ -2930,7 +2931,7 @@ function stepHtml(projectId, s, trackUnlocked) {
         <div id="images_${s.id}" class="step-images">${imageListHtml(projectId, s.id, images)}</div>
       </div>
       <div class="step-hover-zone"></div>
-      <div class="step-slide-panel" draggable="false">
+      <div class="step-slide-panel">
         <button class="prio-flag prio-${prio||'none'}" title="Prioriteit instellen" onclick="cyclePriority('${projectId}','${s.id}','${prio}')">\u2691</button>
         <button class="${hasLink?'has-link':''}" title="${hasLink?'Link aanpassen':'Link toevoegen'}" onclick="promptStepLink('${projectId}','${s.id}','${escapeHtml(s.link_url||'').replace(/'/g,"&#39;")}')">\u{1F517}</button>
         <button title="Afbeelding toevoegen" onclick="triggerImageUpload('${projectId}','${s.id}')">\u{1F4F7}</button>
@@ -3222,23 +3223,23 @@ function openProjectFile(storagePath, fileName) {
 
 let lastCompletedStep = null;
 
-function toggleStepClick(projectId, track, order) {
+function toggleStepClick(projectId, track, order, realStepId) {
   if (!requireOwner()) return;
-  const stepId = projectId + '_' + track + '_' + order;
+  const stepId = realStepId || (projectId + '_' + track + '_' + order);
   const el = document.querySelector(`[data-step-id="${stepId}"]`);
-  if (!el) return;
-  if (el.classList.contains('done')) { uncompleteStep(projectId, track, order); return; }
+  if (!el) { console.error('toggleStepClick: step not found for id', stepId); return; }
+  if (el.classList.contains('done')) { uncompleteStep(projectId, track, order, stepId); return; }
   const subtasksEl = document.getElementById('subtasks_' + stepId);
   const hasIncomplete = subtasksEl && subtasksEl.querySelector('.subtask:not(.done)');
   if (hasIncomplete) {
     el.querySelector('.step-check').animate([{transform:'translateX(0)'},{transform:'translateX(-3px)'},{transform:'translateX(3px)'},{transform:'translateX(0)'}], {duration:250});
     return;
   }
-  completeStep(projectId, track, order);
+  completeStep(projectId, track, order, stepId);
 }
 
-async function completeStep(projectId, track, order) {
-  const stepId = projectId + '_' + track + '_' + order;
+async function completeStep(projectId, track, order, realStepId) {
+  const stepId = realStepId || (projectId + '_' + track + '_' + order);
   const el = document.querySelector(`[data-step-id="${stepId}"]`);
   if (el) {
     el.classList.add('fading');
@@ -3251,9 +3252,9 @@ async function completeStep(projectId, track, order) {
       requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('fading')));
     }, 220);
   }
-  lastCompletedStep = { projectId, track, order };
+  lastCompletedStep = { projectId, track, order, stepId };
   try {
-    await markStepDone(projectId, track, order);
+    await markStepDone(projectId, track, order, stepId);
     if (track === 'productie' && (order === 4 || order === 5)) refreshProjectView(projectId);
   } catch (err) {
     alert('Kon stap niet afronden: ' + err.message);
@@ -3261,8 +3262,8 @@ async function completeStep(projectId, track, order) {
   }
 }
 
-async function uncompleteStep(projectId, track, order) {
-  const stepId = projectId + '_' + track + '_' + order;
+async function uncompleteStep(projectId, track, order, realStepId) {
+  const stepId = realStepId || (projectId + '_' + track + '_' + order);
   const el = document.querySelector(`[data-step-id="${stepId}"]`);
   if (el) {
     el.classList.add('fading');
@@ -3287,9 +3288,9 @@ document.addEventListener('keydown', (e) => {
   const isEditable = (document.activeElement && document.activeElement.isContentEditable) || tag === 'INPUT' || tag === 'TEXTAREA';
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !isEditable && lastCompletedStep) {
     e.preventDefault();
-    const { projectId, track, order } = lastCompletedStep;
+    const { projectId, track, order, stepId } = lastCompletedStep;
     lastCompletedStep = null;
-    uncompleteStep(projectId, track, order);
+    uncompleteStep(projectId, track, order, stepId);
   }
 });
 
