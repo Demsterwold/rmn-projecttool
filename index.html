@@ -2920,7 +2920,7 @@ function stepHtml(projectId, s, trackUnlocked) {
   const hasLink = !!(s.link_url && s.link_url.trim());
   return `
     <div class="step ${cls} prio-${prio||'none'}" draggable="true" data-step-id="${s.id}">
-      <div class="step-check ${blocked?'blocked':''}" ${clickable ? `onclick="toggleStepClick('${projectId}','${s.track}',${s.order_num})"` : ''} title="${blocked ? 'Rond eerst alle subtaken af' : ''}">${s.status === 'done' ? '\u2713' : ''}</div>
+      <div class="step-check ${blocked?'blocked':''}" draggable="false" ${clickable ? `onclick="toggleStepClick('${projectId}','${s.track}',${s.order_num})"` : ''} title="${blocked ? 'Rond eerst alle subtaken af' : ''}">${s.status === 'done' ? '\u2713' : ''}</div>
       <div class="step-main">
         <div class="step-name" id="stepname_${s.id}">${escapeHtml(s.step_name)}</div>
         ${s.due_date ? `<div class="step-due">${fmtDate(s.due_date)}</div>` : ''}
@@ -2930,7 +2930,7 @@ function stepHtml(projectId, s, trackUnlocked) {
         <div id="images_${s.id}" class="step-images">${imageListHtml(projectId, s.id, images)}</div>
       </div>
       <div class="step-hover-zone"></div>
-      <div class="step-slide-panel">
+      <div class="step-slide-panel" draggable="false">
         <button class="prio-flag prio-${prio||'none'}" title="Prioriteit instellen" onclick="cyclePriority('${projectId}','${s.id}','${prio}')">\u2691</button>
         <button class="${hasLink?'has-link':''}" title="${hasLink?'Link aanpassen':'Link toevoegen'}" onclick="promptStepLink('${projectId}','${s.id}','${escapeHtml(s.link_url||'').replace(/'/g,"&#39;")}')">\u{1F517}</button>
         <button title="Afbeelding toevoegen" onclick="triggerImageUpload('${projectId}','${s.id}')">\u{1F4F7}</button>
