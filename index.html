@@ -476,7 +476,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-13 11:05</div>
+<div class="build-tag">build 2026-07-13 12:00</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -2661,7 +2661,21 @@ async function processMeeting(noteId, projectId) {
 }
 async function pollMeetingStatus(noteId, projectId, attempt) {
   attempt = attempt || 0;
-  if (attempt > 90) return; // ~15 minuten bij 10s interval, dan stoppen we vanzelf met pollen
+  if (attempt > 100) {
+    // Vangnet: als de achtergrondfunctie na ~17 minuten nog niets heeft teruggemeld
+    // (bijvoorbeeld doordat Netlify 'm halverwege heeft afgebroken), zetten we de
+    // status terug zodat de meeting niet voor altijd op "bezig" blijft staan.
+    try {
+      const note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=status'))[0];
+      if (note && note.status === 'transcribing') {
+        await sbUpdate('meeting_notes', 'id=eq.' + noteId, { status: 'recorded' });
+        const notes = await sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
+        refreshMeetingList(projectId, notes);
+        alert('Het verwerken van deze meeting duurde te lang en is afgebroken. Probeer het nogmaals via "Verwerken" \u2014 bij een erg lange opname kan het helpen om het rustig nog een keer te proberen.');
+      }
+    } catch (e) {}
+    return;
+  }
   await new Promise(r => setTimeout(r, 10000));
   let note;
   try { note = (await sbSelect('meeting_notes', 'id=eq.' + noteId + '&select=*'))[0]; }
@@ -3201,24 +3215,51 @@ async function deleteProjectFile(fileId, projectId) {
     alert('Verwijderen mislukt: ' + err.message);
   }
 }
-function openProjectFile(storagePath, fileName) {
+async function openProjectFile(storagePath, fileName) {
   const { url: SB_URL } = getConfig();
   const fileUrl = `${SB_URL}/storage/v1/object/public/project-files/${storagePath}`;
   const ext = (fileName.split('.').pop() || '').toLowerCase();
-  const nativelyViewable = ['pdf','png','jpg','jpeg','gif','webp','svg','txt','md'].includes(ext);
-  const viewerSrc = nativelyViewable ? fileUrl : `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(fileUrl)}`;
+  const isImage = ['png','jpg','jpeg','gif','webp','svg'].includes(ext);
+  const isTextLike = ['txt','md','csv'].includes(ext);
   const backdrop = document.createElement('div');
   backdrop.className = 'file-viewer-backdrop';
   backdrop.innerHTML = `
     <div class="file-viewer-bar">
       <span>${escapeHtml(fileName)}</span>
-      <button class="ghost" id="fileViewerClose">\u2715 Sluiten</button>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <a class="small primary" href="${fileUrl}" download="${escapeHtml(fileName)}" style="text-decoration:none;">\u2913 Downloaden</a>
+        <button class="ghost" id="fileViewerClose">\u2715 Sluiten</button>
+      </div>
     </div>
-    <iframe class="file-viewer-frame" src="${viewerSrc}"></iframe>
+    <div class="file-viewer-frame" id="fileViewerBody" style="display:flex; align-items:center; justify-content:center; overflow:auto;">
+      <div class="state-msg">Laden\u2026</div>
+    </div>
   `;
   document.body.appendChild(backdrop);
   document.getElementById('fileViewerClose').onclick = () => backdrop.remove();
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+  // We renderen het bestand altijd zelf (img-tag, platte tekst, of Google's documentviewer)
+  // in plaats van de kale bestands-URL rechtstreeks te laden \u2014 dat laatste hangt af van
+  // browserinstellingen (sommige browsers/laptops downloaden een PDF automatisch in plaats
+  // van 'm te tonen), en dat gedrag kunnen we vanuit de tool niet afdwingen.
+  const body = document.getElementById('fileViewerBody');
+  if (isImage) {
+    body.innerHTML = `<img src="${fileUrl}" alt="${escapeHtml(fileName)}" style="max-width:100%; max-height:100%; object-fit:contain;">`;
+  } else if (isTextLike) {
+    try {
+      const res = await fetch(fileUrl);
+      const text = await res.text();
+      body.innerHTML = `<pre style="white-space:pre-wrap; text-align:left; width:100%; padding:20px; margin:0; font-family:var(--mono); font-size:13px;">${escapeHtml(text)}</pre>`;
+    } catch (err) {
+      body.innerHTML = `<div class="state-msg">Kon bestand niet laden. Gebruik de downloadknop hierboven.</div>`;
+    }
+  } else {
+    // PDF, Word, Excel, PowerPoint, en overig: via Google's documentviewer, die betrouwbaar
+    // in een iframe rendert ongeacht browserinstellingen.
+    body.style.padding = '0';
+    body.innerHTML = `<iframe src="https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(fileUrl)}" style="width:100%; height:100%; border:none;"></iframe>`;
+  }
 }
 
 let lastCompletedStep = null;
