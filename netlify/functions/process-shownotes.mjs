@@ -42,7 +42,9 @@ async function transcribeBlob(blob, filename) {
 }
 
 async function transcribeAudio(audioUrl) {
-  const audioRes = await fetch(audioUrl);
+  const audioRes = await fetch(audioUrl, {
+    headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + process.env.SUPABASE_SERVICE_ROLE_KEY }
+  });
   if (!audioRes.ok) throw new Error('Kon audiobestand niet ophalen (' + audioRes.status + ')');
   const arrayBuffer = await audioRes.arrayBuffer();
   if (arrayBuffer.byteLength <= CHUNK_BYTES) {
@@ -107,7 +109,7 @@ export default async (req) => {
     const projectName = projects[0] && projects[0].name;
 
     // 1. Transcriberen
-    const audioUrl = `${SUPABASE_URL}/storage/v1/object/public/shownotes-audio/${note.audio_path}`;
+    const audioUrl = `${SUPABASE_URL}/storage/v1/object/shownotes-audio/${note.audio_path}`;
     const transcript = await transcribeAudio(audioUrl);
     await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, { status: 'generating', transcript });
 
