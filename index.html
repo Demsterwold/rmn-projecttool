@@ -280,6 +280,10 @@
   .sn-hostread-box { border: 1px dashed var(--border); border-radius: var(--radius); padding: 10px 12px; margin-top: 6px; }
   .sn-tabhead { display: flex; gap: 6px; margin-bottom: 10px; }
   .sn-tabhead button { flex: 1; }
+  .shownotes-home-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .shownotes-home-header h2 { margin: 0; }
+  #shownotesHomeView { max-width: 720px; margin: 0 auto; padding: 24px 0; }
+  #snBrandPreview { margin-top: 4px; }
   .record-panel { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 0; }
   .record-timer { font-family: var(--mono); font-size: 32px; font-weight: 700; color: var(--text); }
   .task-review-list { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
@@ -475,13 +479,13 @@
     <h1 id="homeLink">RMN <span>projecttool</span></h1>
     <div class="header-actions">
       <button class="ghost small auth-btn" id="authBtn">\u{1F512}</button>
-      <button class="ghost small" id="shownotesSettingsBtn" title="Shownotes-instellingen" onclick="showShownotesSettingsModal()">\u2699\uFE0F</button>
       <button class="primary" id="newProjectBtn">+ Nieuw project</button>
     </div>
   </header>
   <nav class="top-nav">
     <button class="top-nav-btn" id="navHome">Projecten</button>
     <button class="top-nav-btn" id="navLiveShows">Lopende podcasts</button>
+    <button class="top-nav-btn" id="navShownotes">Shownotes</button>
   </nav>
   <div id="homeView">
     <div class="home-grid">
@@ -495,6 +499,7 @@
   <div id="liveShowsView" class="hidden"></div>
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
+  <div id="shownotesHomeView" class="hidden"></div>
 </div>
 <div class="build-tag">build 2026-07-13 12:00</div>
 <div id="modalRoot"></div>
@@ -548,6 +553,8 @@ function updateAuthUI() {
   if (!btn) return;
   btn.textContent = isOwner ? '\u{1F513}' : '\u{1F512}';
   btn.title = '';
+  const snView = document.getElementById('shownotesHomeView');
+  if (snView && !snView.classList.contains('hidden')) loadShownotesHome();
 }
 function requireOwner() {
   if (!isOwner) {
@@ -1498,8 +1505,10 @@ function showLiveShowsView(fromHistory) {
   document.getElementById('homeView').classList.add('hidden');
   document.getElementById('detailView').classList.add('hidden');
   document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('shownotesHomeView').classList.add('hidden');
   document.getElementById('liveShowsView').classList.remove('hidden');
   document.getElementById('navHome').classList.remove('active');
+  document.getElementById('navShownotes').classList.remove('active');
   document.getElementById('navLiveShows').classList.add('active');
   if (!fromHistory) history.pushState({ view: 'shows' }, '', window.location.pathname + '?view=shows');
   loadLiveShows();
@@ -1508,8 +1517,10 @@ function showHomeFromNav(fromHistory) {
   document.getElementById('liveShowsView').classList.add('hidden');
   document.getElementById('detailView').classList.add('hidden');
   document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('shownotesHomeView').classList.add('hidden');
   document.getElementById('homeView').classList.remove('hidden');
   document.getElementById('navLiveShows').classList.remove('active');
+  document.getElementById('navShownotes').classList.remove('active');
   document.getElementById('navHome').classList.add('active');
   if (!fromHistory) history.pushState({ view: 'home' }, '', window.location.pathname);
   loadHome();
@@ -1527,6 +1538,7 @@ async function openShow(showId, fromHistory, isShared) {
   document.getElementById('homeView').classList.add('hidden');
   document.getElementById('liveShowsView').classList.add('hidden');
   document.getElementById('detailView').classList.add('hidden');
+  document.getElementById('shownotesHomeView').classList.add('hidden');
   const view = document.getElementById('showDetailView');
   view.classList.remove('hidden');
   view.innerHTML = '<div class="state-msg">Laden\u2026</div>';
@@ -2501,7 +2513,7 @@ async function showMeetingSummaryModal(noteId) {
   document.getElementById('modalCancel').onclick = closeModal;
 }
 function switchDetailTab(projectId, tabName) {
-  ['overzicht', 'meetings', 'shownotes'].forEach(t => {
+  ['overzicht', 'meetings'].forEach(t => {
     const content = document.getElementById('tabContent_' + t + '_' + projectId);
     const btn = document.getElementById('tabBtn_' + t + '_' + projectId);
     if (content) content.classList.toggle('hidden', t !== tabName);
@@ -2754,7 +2766,7 @@ async function showTaskReviewModal(noteId, projectId) {
   };
 }
 
-// ================= Shownotes-module =================
+// ================= Shownotes (losse hoofdtab) =================
 const STATUS_LABELS_SN = {
   uploaded: 'Klaar om te verwerken',
   transcribing: 'Bezig met transcriberen\u2026',
@@ -2763,50 +2775,192 @@ const STATUS_LABELS_SN = {
   error: 'Mislukt'
 };
 
-function shownotesListHtml(projectId, rows) {
-  const uploadRow = `
-    <div class="shownotes-upload-row">
-      <label class="ghost small" style="cursor:pointer; display:inline-block;">
-        + Mp3 uploaden
-        <input type="file" accept="audio/*,.mp3" class="hidden" id="snFileInput_${projectId}" onchange="handleShownotesFileInput('${projectId}')">
-      </label>
-      <span class="hint" style="margin-left:8px;">Upload de aflevering, en klik daarna op "Verwerken" om shownotes te laten genereren.</span>
-    </div>`;
-  if (!rows || !rows.length) {
-    return `<div class="shownotes-list">${uploadRow}<div class="state-msg" style="padding:14px 0;">Nog geen shownotes gegenereerd.</div></div>`;
+// Geselecteerde podcast op de Shownotes-tab. value = "project:<id>" of "show:<id>".
+let __snSelectedValue = null;
+// Nadat een "show" is opgelost naar zijn onderliggende project-id (zie ensureLinkedProject),
+// gebruiken we die project-id voor alle podcast_shownotes-queries.
+let __snActiveProjectId = null;
+let __snActiveEntityType = null; // 'project' | 'show'
+let __snActiveEntityId = null;
+let __snBrands = [];
+
+function showShownotesHomeView(fromHistory) {
+  document.getElementById('homeView').classList.add('hidden');
+  document.getElementById('liveShowsView').classList.add('hidden');
+  document.getElementById('detailView').classList.add('hidden');
+  document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('shownotesHomeView').classList.remove('hidden');
+  document.getElementById('navHome').classList.remove('active');
+  document.getElementById('navLiveShows').classList.remove('active');
+  document.getElementById('navShownotes').classList.add('active');
+  if (!fromHistory) history.pushState({ view: 'shownotes' }, '', window.location.pathname + '?view=shownotes');
+  loadShownotesHome();
+}
+
+async function loadShownotesHome() {
+  const container = document.getElementById('shownotesHomeView');
+  container.innerHTML = '<div class="state-msg">Laden\u2026</div>';
+  let projects, shows, brands;
+  try {
+    [projects, shows, brands] = await Promise.all([
+      sbSelect('projects', "type=eq.podcast&select=id,name,brand_id&order=name.asc"),
+      sbSelect('live_shows', 'select=id,name,linked_project_id,brand_id&order=name.asc'),
+      sbSelect('brand_profiles', 'select=*&order=name.asc').catch(() => [])
+    ]);
+  } catch (e) {
+    container.innerHTML = `<div class="state-msg">Kon niet laden (${escapeHtml(e.message)}).</div>`;
+    return;
   }
-  return `<div class="shownotes-list">${uploadRow}${rows.map(r => `
+  __snBrands = brands || [];
+  container.innerHTML = shownotesHomeHtml(projects || [], shows || []);
+  const sel = document.getElementById('snPodcastSelect');
+  if (sel) {
+    sel.onchange = () => onShownotesPodcastChange(sel.value);
+    if (__snSelectedValue && Array.from(sel.options).some(o => o.value === __snSelectedValue)) {
+      sel.value = __snSelectedValue;
+      onShownotesPodcastChange(sel.value);
+    }
+  }
+  const brandSel = document.getElementById('snBrandSelect');
+  if (brandSel) brandSel.onchange = () => onShownotesBrandChange(brandSel.value);
+  const gearBtn = document.getElementById('shownotesSettingsBtn');
+  if (gearBtn) gearBtn.onclick = showShownotesSettingsModal;
+}
+
+function shownotesHomeHtml(projects, shows) {
+  const gearHtml = isOwner ? `<button class="ghost small" id="shownotesSettingsBtn" title="Shownotes-instellingen">\u2699\uFE0F</button>` : '';
+  return `
+    <div class="shownotes-home-header">
+      <h2>Shownotes</h2>
+      ${gearHtml}
+    </div>
+    <div class="sn-field">
+      <label>Podcast</label>
+      <select id="snPodcastSelect">
+        <option value="">\u2014 kies een podcast \u2014</option>
+        ${projects.length ? `<optgroup label="Projecten">${projects.map(p => `<option value="project:${p.id}">${escapeHtml(p.name)}</option>`).join('')}</optgroup>` : ''}
+        ${shows.length ? `<optgroup label="Lopende podcasts">${shows.map(s => `<option value="show:${s.id}">${escapeHtml(s.name)}</option>`).join('')}</optgroup>` : ''}
+      </select>
+    </div>
+    <div id="snBrandRow" class="sn-field hidden">
+      <label>Merk (voor de vaste commerci\u00eble links in de shownotes)</label>
+      <select id="snBrandSelect">
+        <option value="">\u2014 geen \u2014</option>
+        ${__snBrands.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('')}
+      </select>
+      <div class="hint" id="snBrandPreview"></div>
+    </div>
+    <div id="snUploadWrap" class="hidden">
+      <div class="shownotes-upload-row">
+        <label class="ghost small file-drop-label" id="snDropLabel" ondragover="event.preventDefault(); this.classList.add('drag-active')" ondragleave="this.classList.remove('drag-active')" ondrop="handleShownotesDrop(event)">
+          + Mp3 uploaden of slepen
+          <input type="file" accept="audio/*,.mp3" class="hidden" id="snFileInput" onchange="handleShownotesFileInput()">
+        </label>
+        <span class="hint" style="margin-left:8px;">Upload de aflevering, en klik daarna op "Verwerken" om shownotes te laten genereren.</span>
+      </div>
+    </div>
+    <div id="shownotesEntriesList"></div>
+  `;
+}
+
+async function onShownotesPodcastChange(value) {
+  __snSelectedValue = value;
+  const brandRow = document.getElementById('snBrandRow');
+  const uploadWrap = document.getElementById('snUploadWrap');
+  const listEl = document.getElementById('shownotesEntriesList');
+  if (!value) {
+    brandRow.classList.add('hidden'); uploadWrap.classList.add('hidden'); listEl.innerHTML = '';
+    __snActiveProjectId = null; __snActiveEntityType = null; __snActiveEntityId = null;
+    return;
+  }
+  const [type, id] = value.split(':');
+  __snActiveEntityType = type; __snActiveEntityId = id;
+  listEl.innerHTML = '<div class="state-msg">Laden\u2026</div>';
+  let brandId = null;
+  if (type === 'project') {
+    const row = (await sbSelect('projects', 'id=eq.' + id + '&select=id,brand_id'))[0];
+    __snActiveProjectId = id;
+    brandId = row && row.brand_id;
+  } else {
+    const row = (await sbSelect('live_shows', 'id=eq.' + id + '&select=linked_project_id,brand_id'))[0];
+    __snActiveProjectId = (row && row.linked_project_id) || await ensureLinkedProject(id);
+    brandId = row && row.brand_id;
+  }
+  brandRow.classList.remove('hidden');
+  uploadWrap.classList.remove('hidden');
+  const brandSel = document.getElementById('snBrandSelect');
+  if (brandSel) brandSel.value = brandId || '';
+  updateSnBrandPreview(brandId);
+  await refreshShownotesList();
+}
+
+function updateSnBrandPreview(brandId) {
+  const el = document.getElementById('snBrandPreview');
+  if (!el) return;
+  const brand = __snBrands.find(b => b.id === brandId);
+  el.textContent = brand ? `${brand.website_url || 'geen website ingesteld'}` : '';
+}
+
+async function onShownotesBrandChange(brandId) {
+  updateSnBrandPreview(brandId || null);
+  if (!__snActiveEntityType || !__snActiveEntityId) return;
+  const table = __snActiveEntityType === 'project' ? 'projects' : 'live_shows';
+  try {
+    await sbUpdate(table, 'id=eq.' + __snActiveEntityId, { brand_id: brandId || null });
+  } catch (e) {
+    alert('Merk opslaan mislukt: ' + e.message);
+  }
+}
+
+function shownotesEntriesHtml(rows) {
+  if (!rows || !rows.length) return '<div class="shownotes-list"><div class="state-msg" style="padding:14px 0;">Nog geen shownotes gegenereerd voor deze podcast.</div></div>';
+  return `<div class="shownotes-list">${rows.map(r => `
     <div class="shownotes-row" data-sn-id="${r.id}">
-      <div class="shownotes-row-main" ${r.status === 'ready' ? `onclick="showShownotesReviewModal('${r.id}','${projectId}')" style="cursor:pointer;"` : ''}>
+      <div class="shownotes-row-main" ${r.status === 'ready' ? `onclick="showShownotesReviewModal('${r.id}')" style="cursor:pointer;"` : ''}>
         <span class="shownotes-row-title">${escapeHtml(r.title || 'Aflevering ' + fmtDate(r.created_at))}</span>
         <span class="shownotes-row-status">${STATUS_LABELS_SN[r.status] || r.status}${r.error_message ? ' \u2014 ' + escapeHtml(r.error_message) : ''}</span>
       </div>
       <div class="shownotes-row-actions">
-        ${r.status === 'uploaded' || r.status === 'error' ? `<button class="small primary" onclick="processShownotes('${r.id}','${projectId}')">Verwerken</button>` : ''}
-        ${r.status === 'ready' ? `<button class="small ghost" onclick="showShownotesReviewModal('${r.id}','${projectId}')">Bekijken</button>` : ''}
+        ${r.status === 'uploaded' || r.status === 'error' ? `<button class="small primary" onclick="processShownotes('${r.id}')">Verwerken</button>` : ''}
+        ${r.status === 'ready' ? `<button class="small ghost" onclick="showShownotesReviewModal('${r.id}')">Bekijken</button>` : ''}
         ${r.status === 'transcribing' || r.status === 'generating' ? `<button class="small" disabled>Bezig\u2026</button>` : ''}
-        <button class="small ghost" onclick="deleteShownotesEntry('${r.id}','${projectId}')">\u00d7</button>
+        <button class="small ghost" onclick="deleteShownotesEntry('${r.id}')">\u00d7</button>
       </div>
     </div>
   `).join('')}</div>`;
 }
 
-function triggerShownotesUpload(projectId) {
-  if (!requireOwner()) return;
-  document.getElementById('snFileInput_' + projectId).click();
+async function refreshShownotesList() {
+  if (!__snActiveProjectId) return;
+  const rows = await sbSelect('podcast_shownotes', 'project_id=eq.' + __snActiveProjectId + '&select=*&order=created_at.desc');
+  const listEl = document.getElementById('shownotesEntriesList');
+  if (listEl) listEl.innerHTML = shownotesEntriesHtml(rows);
 }
 
-async function handleShownotesFileInput(projectId) {
+function triggerShownotesUpload() {
   if (!requireOwner()) return;
-  const input = document.getElementById('snFileInput_' + projectId);
+  document.getElementById('snFileInput').click();
+}
+async function handleShownotesFileInput() {
+  if (!requireOwner()) return;
+  const input = document.getElementById('snFileInput');
   const file = input.files[0];
   if (!file) return;
-  await uploadShownotesAudio(projectId, file);
+  await uploadShownotesAudio(file);
   input.value = '';
 }
-
-async function uploadShownotesAudio(projectId, file) {
+async function handleShownotesDrop(event) {
+  event.preventDefault();
+  document.getElementById('snDropLabel').classList.remove('drag-active');
   if (!requireOwner()) return;
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  await uploadShownotesAudio(file);
+}
+
+async function uploadShownotesAudio(file) {
+  if (!requireOwner()) return;
+  if (!__snActiveProjectId) { alert('Kies eerst een podcast.'); return; }
   try {
     const { url: SB_URL, key: SB_KEY } = getConfig();
     const authToken = await getAuthToken();
@@ -2817,26 +2971,20 @@ async function uploadShownotesAudio(projectId, file) {
       method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken, 'Content-Type': file.type || 'audio/mpeg' }, body: file
     });
     if (!uploadRes.ok) throw new Error('Upload mislukt (' + uploadRes.status + '). Grote bestanden kunnen even duren \u2014 probeer het zo nodig nogmaals.');
-    await sbInsert('podcast_shownotes', [{ id, project_id: projectId, title: file.name.replace(/\.[^.]+$/, ''), audio_path: storagePath, status: 'uploaded' }]);
-    const rows = await sbSelect('podcast_shownotes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-    const listEl = document.getElementById('shownotesList_' + projectId);
-    if (listEl) listEl.innerHTML = shownotesListHtml(projectId, rows);
+    const brandSel = document.getElementById('snBrandSelect');
+    await sbInsert('podcast_shownotes', [{ id, project_id: __snActiveProjectId, title: file.name.replace(/\.[^.]+$/, ''), audio_path: storagePath, status: 'uploaded', brand_id: (brandSel && brandSel.value) || null }]);
+    await refreshShownotesList();
   } catch (err) {
     alert('Mp3 uploaden mislukt: ' + err.message);
   }
 }
 
-async function refreshShownotesList(projectId) {
-  const rows = await sbSelect('podcast_shownotes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc');
-  const listEl = document.getElementById('shownotesList_' + projectId);
-  if (listEl) listEl.innerHTML = shownotesListHtml(projectId, rows);
-}
-
-async function processShownotes(id, projectId) {
+async function processShownotes(id) {
   if (!requireOwner()) return;
+  const projectId = __snActiveProjectId;
   try {
     await sbUpdate('podcast_shownotes', 'id=eq.' + id, { status: 'transcribing', error_message: null });
-    await refreshShownotesList(projectId);
+    await refreshShownotesList();
     // Achtergrondfunctie, zelfde opzet als process-meeting: kickoff en niet wachten op
     // het resultaat in dit verzoek (transcriptie + generatie kan enkele minuten duren
     // bij lange afleveringen).
@@ -2847,22 +2995,22 @@ async function processShownotes(id, projectId) {
     if (!kickoffRes.ok && kickoffRes.status !== 202) {
       throw new Error('Verwerk-functie nog niet beschikbaar (status ' + kickoffRes.status + '). Is de serverless functie al gedeployed?');
     }
-    pollShownotesStatus(id, projectId);
+    pollShownotesStatus(id);
   } catch (err) {
     await sbUpdate('podcast_shownotes', 'id=eq.' + id, { status: 'error', error_message: err.message });
-    await refreshShownotesList(projectId);
+    await refreshShownotesList();
     alert('Verwerken mislukt: ' + err.message);
   }
 }
 
-async function pollShownotesStatus(id, projectId, attempt) {
+async function pollShownotesStatus(id, attempt) {
   attempt = attempt || 0;
   if (attempt > 100) {
     try {
       const note = (await sbSelect('podcast_shownotes', 'id=eq.' + id + '&select=status'))[0];
       if (note && (note.status === 'transcribing' || note.status === 'generating')) {
         await sbUpdate('podcast_shownotes', 'id=eq.' + id, { status: 'error', error_message: 'Verwerken duurde te lang en is afgebroken.' });
-        await refreshShownotesList(projectId);
+        await refreshShownotesList();
         alert('Het genereren van shownotes duurde te lang en is afgebroken. Probeer het nogmaals via "Verwerken".');
       }
     } catch (e) {}
@@ -2873,12 +3021,12 @@ async function pollShownotesStatus(id, projectId, attempt) {
   try { note = (await sbSelect('podcast_shownotes', 'id=eq.' + id + '&select=*'))[0]; }
   catch (e) { return; }
   if (!note) return;
-  if (note.status === 'transcribing' || note.status === 'generating') { pollShownotesStatus(id, projectId, attempt + 1); return; }
-  await refreshShownotesList(projectId);
-  if (note.status === 'ready') showShownotesReviewModal(id, projectId);
+  if (note.status === 'transcribing' || note.status === 'generating') { pollShownotesStatus(id, attempt + 1); return; }
+  await refreshShownotesList();
+  if (note.status === 'ready') showShownotesReviewModal(id);
 }
 
-async function deleteShownotesEntry(id, projectId) {
+async function deleteShownotesEntry(id) {
   if (!requireOwner()) return;
   if (!confirm('Deze shownotes-aflevering verwijderen? De mp3 wordt ook verwijderd.')) return;
   try {
@@ -2889,7 +3037,7 @@ async function deleteShownotesEntry(id, projectId) {
       const authToken = await getAuthToken();
       fetch(`${SB_URL}/storage/v1/object/shownotes-audio/${row.audio_path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{});
     }
-    await refreshShownotesList(projectId);
+    await refreshShownotesList();
   } catch (err) {
     alert('Verwijderen mislukt: ' + err.message);
   }
@@ -2899,7 +3047,6 @@ function charCounterHtml(fieldId, text, limit) {
   const len = (text || '').length;
   return `<span class="sn-counter ${len > limit ? 'over' : ''}" id="cnt_${fieldId}">${len}/${limit}</span>`;
 }
-
 function wireCounter(fieldId, limit) {
   const el = document.getElementById(fieldId);
   const cnt = document.getElementById('cnt_' + fieldId);
@@ -2911,34 +3058,47 @@ function wireCounter(fieldId, limit) {
   });
 }
 
-async function showShownotesReviewModal(id, projectId) {
+// Bouwt het vaste commerci\u00eble blok (website + socials) voor een merk, zodat dit
+// niet elke keer opnieuw hoeft te worden bedacht.
+function brandBlockText(brand) {
+  if (!brand) return '';
+  const lines = [`\u2014`, `${brand.name}: ${brand.website_url || ''}`];
+  const socials = brand.socials || {};
+  const socialParts = Object.entries(socials).filter(([,v]) => v).map(([k,v]) => `${k.charAt(0).toUpperCase()+k.slice(1)} ${v}`);
+  if (socialParts.length) lines.push('Volg ons: ' + socialParts.join(' \u00b7 '));
+  return lines.join('\n');
+}
+
+async function showShownotesReviewModal(id) {
   const n = (await sbSelect('podcast_shownotes', 'id=eq.' + id + '&select=*'))[0];
   if (!n) return;
-  const brands = await sbSelect('brand_profiles', 'select=*&order=name.asc').catch(() => []);
+  const brand = __snBrands.find(b => b.id === n.brand_id);
+  // Vast merkblok automatisch toevoegen als het er nog niet in staat, zodat je dit
+  // niet iedere keer opnieuw hoeft te typen.
+  let audioText = n.shownotes_audio || '';
+  let youtubeText = n.shownotes_youtube || '';
+  if (brand && brand.website_url) {
+    const block = brandBlockText(brand);
+    if (!audioText.includes(brand.website_url)) audioText = (audioText ? audioText + '\n\n' : '') + block;
+    if (!youtubeText.includes(brand.website_url)) youtubeText = (youtubeText ? youtubeText + '\n\n' : '') + block;
+  }
   const chapters = Array.isArray(n.chapters) ? n.chapters : [];
   const hashtags = Array.isArray(n.hashtags) ? n.hashtags.join(' ') : '';
   const tags = Array.isArray(n.tags) ? n.tags.join(', ') : '';
   renderModal(`
     <h2>Shownotes \u2014 ${escapeHtml(n.title || '')}</h2>
     <div class="sn-field">
-      <label>Merk <span></span></label>
-      <select id="snBrand">
-        <option value="">\u2014 geen \u2014</option>
-        ${brands.map(b => `<option value="${b.id}" ${b.id === n.brand_id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
-      </select>
-    </div>
-    <div class="sn-field">
       <label>Hook (eerste zin, Spotify/Apple-preview) ${charCounterHtml('snHook', n.hook, 150)}</label>
       <textarea id="snHook" style="min-height:50px;">${escapeHtml(n.hook || '')}</textarea>
     </div>
     <div class="sn-field">
-      <label>Shownotes \u2014 Spotify / Apple Podcasts ${charCounterHtml('snAudio', n.shownotes_audio, 4000)}</label>
-      <textarea id="snAudio" style="min-height:160px;">${escapeHtml(n.shownotes_audio || '')}</textarea>
+      <label>Shownotes \u2014 Spotify / Apple Podcasts ${charCounterHtml('snAudio', audioText, 4000)}</label>
+      <textarea id="snAudio" style="min-height:160px;">${escapeHtml(audioText)}</textarea>
       <button class="small ghost" style="margin-top:4px;" onclick="copySnField('snAudio')">\u{1F4CB} Kopi\u00ebren</button>
     </div>
     <div class="sn-field">
-      <label>Shownotes \u2014 YouTube ${charCounterHtml('snYoutube', n.shownotes_youtube, 5000)}</label>
-      <textarea id="snYoutube" style="min-height:160px;">${escapeHtml(n.shownotes_youtube || '')}</textarea>
+      <label>Shownotes \u2014 YouTube ${charCounterHtml('snYoutube', youtubeText, 5000)}</label>
+      <textarea id="snYoutube" style="min-height:160px;">${escapeHtml(youtubeText)}</textarea>
       <button class="small ghost" style="margin-top:4px;" onclick="copySnField('snYoutube')">\u{1F4CB} Kopi\u00ebren</button>
     </div>
     <div class="sn-field">
@@ -2974,7 +3134,6 @@ async function showShownotesReviewModal(id, projectId) {
     })).filter(c => c.title);
     try {
       await sbUpdate('podcast_shownotes', 'id=eq.' + id, {
-        brand_id: document.getElementById('snBrand').value || null,
         hook: document.getElementById('snHook').value,
         shownotes_audio: document.getElementById('snAudio').value,
         shownotes_youtube: document.getElementById('snYoutube').value,
@@ -3005,13 +3164,14 @@ function copySnField(fieldId) {
   navigator.clipboard.writeText(el.value).then(() => {}, () => alert('Kopi\u00ebren niet gelukt \u2014 selecteer en kopieer handmatig.'));
 }
 
-// ---- Instellingen: shownotes-prompt + merkprofielen ----
+// ---- Instellingen: shownotes-prompt + merkprofielen (alleen zichtbaar/klikbaar voor de eigenaar) ----
 async function showShownotesSettingsModal() {
   if (!requireOwner()) return;
   const [promptRow, brands] = await Promise.all([
     sbSelect('app_settings', 'key=eq.shownotes_prompt&select=value').then(r => r[0]).catch(() => null),
     sbSelect('brand_profiles', 'select=*&order=name.asc').catch(() => [])
   ]);
+  __snBrands = brands || [];
   renderModal(`
     <h2>Shownotes-instellingen</h2>
     <div class="sn-field">
@@ -3097,19 +3257,19 @@ async function openProject(projectId, isShared, fromHistory) {
   document.getElementById('homeView').classList.add('hidden');
   document.getElementById('liveShowsView').classList.add('hidden');
   document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('shownotesHomeView').classList.add('hidden');
   const detail = document.getElementById('detailView');
   detail.classList.remove('hidden');
   detail.innerHTML = '<div class="state-msg">Laden\u2026</div>';
-  let p, steps, benchmarks, stats, meetingNotes, projectFiles, shownotesRows;
+  let p, steps, benchmarks, stats, meetingNotes, projectFiles;
   try {
-    [p, steps, benchmarks, stats, meetingNotes, projectFiles, shownotesRows] = await Promise.all([
+    [p, steps, benchmarks, stats, meetingNotes, projectFiles] = await Promise.all([
       sbSelect('projects', 'id=eq.' + projectId + '&select=*').then(r => r[0]),
       sbSelect('project_steps', 'project_id=eq.' + projectId + '&select=*&order=order_num.asc'),
       sbSelect('benchmark_checks', 'project_id=eq.' + projectId + '&select=*&order=week_number.asc'),
       sbSelect('podcast_stats', 'project_id=eq.' + projectId + '&select=*&order=week_number.asc'),
       sbSelect('meeting_notes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc'),
-      sbSelect('project_files', 'project_id=eq.' + projectId + '&select=*&order=uploaded_at.desc').catch(() => []),
-      sbSelect('podcast_shownotes', 'project_id=eq.' + projectId + '&select=*&order=created_at.desc').catch(() => [])
+      sbSelect('project_files', 'project_id=eq.' + projectId + '&select=*&order=uploaded_at.desc').catch(() => [])
     ]);
   } catch (e) {
     detail.innerHTML = `<div class="state-msg">Kon project niet laden (${escapeHtml(e.message)}).<br><button class="small" onclick="openProject('${projectId}', ${!!isShared})">Opnieuw proberen</button></div>`;
@@ -3229,7 +3389,6 @@ async function openProject(projectId, isShared, fromHistory) {
     <div class="detail-tabs">
       <button class="detail-tab-btn active" id="tabBtn_overzicht_${p.id}" onclick="switchDetailTab('${p.id}','overzicht')">Overzicht</button>
       <button class="detail-tab-btn" id="tabBtn_meetings_${p.id}" onclick="switchDetailTab('${p.id}','meetings')">Meetings${meetingNotes.length ? ' (' + meetingNotes.length + ')' : ''}</button>
-      ${!isOverig ? `<button class="detail-tab-btn" id="tabBtn_shownotes_${p.id}" onclick="switchDetailTab('${p.id}','shownotes')">Shownotes${shownotesRows.length ? ' (' + shownotesRows.length + ')' : ''}</button>` : ''}
     </div>
     <div id="tabContent_overzicht_${p.id}" class="detail-tab-content">
       <div class="project-concept">
@@ -3248,10 +3407,6 @@ async function openProject(projectId, isShared, fromHistory) {
     <div id="tabContent_meetings_${p.id}" class="detail-tab-content hidden">
       <div id="meetingList_${p.id}">${meetingNotesListHtml(p.id, meetingNotes)}</div>
     </div>
-    ${!isOverig ? `
-    <div id="tabContent_shownotes_${p.id}" class="detail-tab-content hidden">
-      <div id="shownotesList_${p.id}">${shownotesListHtml(p.id, shownotesRows)}</div>
-    </div>` : ''}
   `;
 
   const trackKeys = isOverig ? ['taken'] : ['productie','marketing','distributie'];
@@ -3842,8 +3997,10 @@ function closeProject(fromHistory) {
   document.getElementById('detailView').classList.add('hidden');
   document.getElementById('liveShowsView').classList.add('hidden');
   document.getElementById('showDetailView').classList.add('hidden');
+  document.getElementById('shownotesHomeView').classList.add('hidden');
   document.getElementById('homeView').classList.remove('hidden');
   document.getElementById('navLiveShows').classList.remove('active');
+  document.getElementById('navShownotes').classList.remove('active');
   document.getElementById('navHome').classList.add('active');
   if (!fromHistory && window.location.search) {
     history.pushState({ view: 'home' }, '', window.location.pathname);
@@ -3858,6 +4015,7 @@ document.getElementById('newProjectBtn').onclick = showNewProjectModal;
 document.getElementById('homeLink').onclick = () => goHome();
 document.getElementById('navHome').onclick = () => showHomeFromNav();
 document.getElementById('navLiveShows').onclick = () => showLiveShowsView();
+document.getElementById('navShownotes').onclick = () => showShownotesHomeView();
 document.getElementById('navHome').classList.add('active');
 
 // Maandagochtend-herinnering: alleen zichtbaar als de tool op dat moment open staat
@@ -3885,6 +4043,7 @@ function parseRouteFromUrl() {
   if (params.get('project')) return { view: 'project', id: params.get('project') };
   if (params.get('show')) return { view: 'show', id: params.get('show') };
   if (params.get('view') === 'shows') return { view: 'shows' };
+  if (params.get('view') === 'shownotes') return { view: 'shownotes' };
   return { view: 'home' };
 }
 
@@ -3893,6 +4052,7 @@ window.addEventListener('popstate', (e) => {
   if (route.view === 'project' && route.id) openProject(route.id, false, true);
   else if (route.view === 'show' && route.id) openShow(route.id, true);
   else if (route.view === 'shows') showLiveShowsView(true);
+  else if (route.view === 'shownotes') showShownotesHomeView(true);
   else closeProject(true);
 });
 
@@ -3920,6 +4080,9 @@ if (__initialRoute.view === 'shared') {
 } else if (__initialRoute.view === 'shows') {
   history.replaceState({ view: 'shows' }, '');
   showLiveShowsView(true);
+} else if (__initialRoute.view === 'shownotes') {
+  history.replaceState({ view: 'shownotes' }, '');
+  showShownotesHomeView(true);
 } else {
   history.replaceState({ view: 'home' }, '', window.location.pathname);
   loadHome();
