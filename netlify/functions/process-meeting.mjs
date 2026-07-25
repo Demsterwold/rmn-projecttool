@@ -3,9 +3,10 @@
 // bij een gewone functie), nodig voor langere meeting-opnames.
 //
 // Lange opnames worden aan de opname-kant al automatisch in stukken van ~18 minuten
-// geknipt (audio_paths, een lijst). Elk stuk wordt apart getranscribeerd met het betere
-// gpt-4o-transcribe-model (dat een limiet van ~23 minuten per bestand heeft) en daarna
-// weer aan elkaar geplakt tot één doorlopend transcript.
+// geknipt (audio_paths, een lijst). Deze stukken worden PARALLEL getranscribeerd
+// (i.p.v. na elkaar) met het gpt-4o-transcribe-model, en daarna in de juiste volgorde
+// weer aan elkaar geplakt tot één doorlopend transcript. Tussentijdse voortgang (0-100)
+// wordt in de kolom "progress" bijgewerkt zodat de tool een percentage kan tonen.
 //
 // Vereiste environment variables in Netlify:
 //   OPENAI_API_KEY       - voor transcriptie
@@ -22,6 +23,10 @@ async function sbAdmin(method, path, body) {
   if (!res.ok) { const t = await res.text(); throw new Error('Supabase-fout (' + res.status + '): ' + t.slice(0, 300)); }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
+}
+
+async function setProgress(noteId, pct) {
+  try { await sbAdmin('PATCH', 'meeting_notes?id=eq.' + noteId, { progress: Math.min(99, Math.max(0, Math.round(pct))) }); } catch (e) {}
 }
 
 async function transcribeOneFile(audioUrl) {
@@ -56,14 +61,21 @@ export default async (req) => {
     const paths = (row.audio_paths && row.audio_paths.length) ? row.audio_paths : (row.audio_path ? [row.audio_path] : []);
     if (!paths.length) throw new Error('Geen audiobestand gevonden bij deze opname.');
 
-    // 1. Transcriptie, per stuk, in de juiste volgorde, daarna aan elkaar plakken
-    const transcriptParts = [];
-    for (const path of paths) {
+    // 1. Transcriptie: alle stukken PARALLEL, daarna in de juiste volgorde aan elkaar
+    // geplakt. Voortgang loopt van 5% naar 60% naarmate stukken terugkomen.
+    await setProgress(noteId, 5);
+    let done = 0;
+    const transcriptParts = await Promise.all(paths.map((path, i) => {
       const audioUrl = `${SUPABASE_URL}/storage/v1/object/public/meeting-audio/${path}`;
-      const part = await transcribeOneFile(audioUrl);
-      transcriptParts.push(part);
-    }
-    const transcript = transcriptParts.join(' ');
+      return transcribeOneFile(audioUrl).then(text => {
+        done++;
+        setProgress(noteId, 5 + (done / paths.length) * 55);
+        return { i, text };
+      });
+    }));
+    transcriptParts.sort((a, b) => a.i - b.i);
+    const transcript = transcriptParts.map(p => p.text).join(' ');
+    await setProgress(noteId, 65);
 
     // 2. Taken + samenvatting
     const projects = await sbAdmin('GET', 'projects?select=id,name,type');
@@ -85,6 +97,7 @@ Transcript:
 ${transcript}
 """`;
 
+    await setProgress(noteId, 80);
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
@@ -99,7 +112,7 @@ ${transcript}
 
     // 3. Resultaat wegschrijven
     await sbAdmin('PATCH', 'meeting_notes?id=eq.' + noteId, {
-      transcript, proposed_tasks: parsed.tasks || [], summary: parsed.summary || null, status: 'ready'
+      transcript, proposed_tasks: parsed.tasks || [], summary: parsed.summary || null, status: 'ready', progress: 100
     });
   } catch (err) {
     console.error('process-meeting error:', err);

@@ -4,17 +4,19 @@
 // transcriptie + generatie bij lange afleveringen anders wordt afgebroken.
 //
 // In tegenstelling tot process-meeting.mjs komt deze mp3 niet al voorgeknipt binnen
-// (dat gebeurt daar tijdens de opname zelf, in stukken van ~18 minuten). Hier knippen
-// we daarom zelf: gewoon in vaste stukken ruwe bytes (geen ffmpeg/dependency nodig,
-// zelfde zero-dependency aanpak als de rest van dit project). Mp3 is frame-gebaseerd
-// en tolereert dit prima voor transcriptiedoeleinden; een klein beetje contextverlies
-// op de knip zelf is acceptabel, zelfde afweging als bij de meeting-chunks.
+// (dat gebeurt daar tijdens de opname zelf). Hier knippen we daarom zelf: in vaste
+// stukken ruwe bytes (geen ffmpeg/dependency nodig). Mp3 is frame-gebaseerd en
+// tolereert dit prima voor transcriptiedoeleinden.
+//
+// De stukken worden PARALLEL getranscribeerd (i.p.v. na elkaar) — bij een aflevering
+// van 20-45 minuten scheelt dat flink in wachttijd. Tussentijdse voortgang (0-100)
+// wordt in de kolom "progress" bijgewerkt zodat de tool een percentage kan tonen.
 //
 // Vereiste environment variables in Netlify (zelfde als process-meeting.mjs):
 // OPENAI_API_KEY, ANTHROPIC_API_KEY, SUPABASE_SERVICE_ROLE_KEY
 
 const SUPABASE_URL = 'https://oxzdddxjcqmhwsxiupic.supabase.co';
-const CHUNK_BYTES = 20 * 1024 * 1024; // ~20MB per stuk, ruim onder de 25MB-limiet van het transcriptiemodel
+const CHUNK_BYTES = 8 * 1024 * 1024; // ~8MB (~8 min) per stuk, voor fijnere parallellisatie + voortgang
 
 async function sbAdmin(method, path, body) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -24,6 +26,10 @@ async function sbAdmin(method, path, body) {
   if (!res.ok) { const t = await res.text(); throw new Error('Supabase-fout (' + res.status + '): ' + t.slice(0, 300)); }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
+}
+
+async function setProgress(id, pct) {
+  try { await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, { progress: Math.min(99, Math.max(0, Math.round(pct))) }); } catch (e) {}
 }
 
 async function transcribeBlob(blob, filename) {
@@ -41,28 +47,37 @@ async function transcribeBlob(blob, filename) {
   return text;
 }
 
-async function transcribeAudio(audioUrl) {
+async function transcribeAudio(audioUrl, id) {
   const audioRes = await fetch(audioUrl, {
     headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + process.env.SUPABASE_SERVICE_ROLE_KEY }
   });
   if (!audioRes.ok) throw new Error('Kon audiobestand niet ophalen (' + audioRes.status + ')');
   const arrayBuffer = await audioRes.arrayBuffer();
-  if (arrayBuffer.byteLength <= CHUNK_BYTES) {
-    return transcribeBlob(new Blob([arrayBuffer]), 'aflevering.mp3');
-  }
-  // Lange aflevering: in vaste byte-stukken knippen en na elkaar transcriberen.
-  const parts = [];
+  await setProgress(id, 10);
+
+  // In stukken knippen
+  const chunks = [];
   let offset = 0;
-  let i = 0;
   while (offset < arrayBuffer.byteLength) {
     const end = Math.min(offset + CHUNK_BYTES, arrayBuffer.byteLength);
-    const chunkBlob = new Blob([arrayBuffer.slice(offset, end)]);
-    const text = await transcribeBlob(chunkBlob, `aflevering_${i}.mp3`);
-    parts.push(text);
+    chunks.push(arrayBuffer.slice(offset, end));
     offset = end;
-    i++;
   }
-  return parts.join(' ');
+  if (chunks.length === 0) chunks.push(arrayBuffer.slice(0));
+
+  // Parallel transcriberen (i.p.v. na elkaar) — scheelt flink in wachttijd bij
+  // afleveringen van 20-45 minuten. Voortgang loopt van 10% naar 60% naarmate
+  // stukken terugkomen.
+  let done = 0;
+  const parts = await Promise.all(chunks.map((chunkBuffer, i) =>
+    transcribeBlob(new Blob([chunkBuffer]), `aflevering_${i}.mp3`).then(text => {
+      done++;
+      setProgress(id, 10 + (done / chunks.length) * 50);
+      return { i, text };
+    })
+  ));
+  parts.sort((a, b) => a.i - b.i);
+  return parts.map(p => p.text).join(' ');
 }
 
 async function generateShownotes(transcript, basePrompt, projectName) {
@@ -73,6 +88,7 @@ Let op het verschil tussen platformen:
 - Spotify/Apple Podcasts: max 4000 tekens, en de eerste ~150 tekens zijn het enige wat direct zichtbaar is voor "meer weergeven" verschijnt.
 - YouTube: max 5000 tekens, keyword-rijk, met hoofdstukken (chapters) die beginnen bij 0:00, elk hoofdstuk minimaal 10 seconden, en 3-5 relevante hashtags.
 Signaleer of er een host-read (advertentie/sponsorvermelding door de presentator) in het transcript zit; zo ja, stel een korte, scherpe advertentietekst voor met duidelijk disclosure-label ("Advertentie:") vlak bij de URL.
+Schrijf GEEN social-links, website-CTA of merk-outro zelf — dat voegt het systeem apart en automatisch toe.
 
 Geef ALLEEN geldige JSON terug, zonder uitleg ervoor of erna, in dit exacte formaat:
 {"hook":"...","shownotes_audio":"...","shownotes_youtube":"...","chapters":[{"time":"0:00","title":"..."}],"hashtags":["#voorbeeld"],"tags":["voorbeeld"],"hostread_detected":true,"hostread_text":"...","hostread_url":""}`;
@@ -108,19 +124,21 @@ export default async (req) => {
     const projects = projectId ? await sbAdmin('GET', 'projects?id=eq.' + projectId + '&select=name') : [];
     const projectName = projects[0] && projects[0].name;
 
-    // 1. Transcriberen
+    // 1. Transcriberen (parallel, met voortgang 10-60%)
     const audioUrl = `${SUPABASE_URL}/storage/v1/object/shownotes-audio/${note.audio_path}`;
-    const transcript = await transcribeAudio(audioUrl);
-    await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, { status: 'generating', transcript });
+    const transcript = await transcribeAudio(audioUrl, id);
+    await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, { status: 'generating', transcript, progress: 65 });
 
     // 2. Shownotes laten schrijven, met het door de SEO-redacteur ingestelde prompt
     const promptRows = await sbAdmin('GET', 'app_settings?key=eq.shownotes_prompt&select=value');
     const basePrompt = (promptRows[0] && promptRows[0].value) || 'Je bent SEO-redacteur voor RMN-podcasts.';
+    await setProgress(id, 80);
     const result = await generateShownotes(transcript, basePrompt, projectName);
 
     // 3. Resultaat wegschrijven
     await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, {
       status: 'ready',
+      progress: 100,
       hook: result.hook || '',
       shownotes_audio: result.shownotes_audio || '',
       shownotes_youtube: result.shownotes_youtube || '',
