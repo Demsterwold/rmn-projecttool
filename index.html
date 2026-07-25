@@ -2963,6 +2963,25 @@ async function handleShownotesDrop(event) {
   await uploadShownotesAudio(file);
 }
 
+const SN_MAX_CHUNK_BYTES = 40 * 1024 * 1024; // ruim onder de 50MB-limiet van de storage-bucket
+
+function uploadOneChunk(SB_URL, SB_KEY, authToken, storagePath, blob, contentType, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${SB_URL}/storage/v1/object/shownotes-audio/${storagePath}`);
+    xhr.setRequestHeader('apikey', SB_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+    xhr.setRequestHeader('Content-Type', contentType || 'audio/mpeg');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error('Upload mislukt (' + xhr.status + ').'));
+    };
+    xhr.onerror = () => reject(new Error('Upload mislukt door een netwerkfout.'));
+    xhr.send(blob);
+  });
+}
+
 async function uploadShownotesAudio(file) {
   if (!requireOwner()) return;
   if (!__snActiveProjectId) { alert('Kies eerst een podcast.'); return; }
@@ -2973,30 +2992,33 @@ async function uploadShownotesAudio(file) {
     const authToken = await getAuthToken();
     const id = uid('sn');
     const ext = (file.name.split('.').pop() || 'mp3').toLowerCase();
-    const storagePath = id + '.' + ext;
     if (dropLabel) { dropLabel.classList.add('sn-uploading'); dropLabel.innerHTML = 'Uploaden\u2026 0%'; }
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${SB_URL}/storage/v1/object/shownotes-audio/${storagePath}`);
-      xhr.setRequestHeader('apikey', SB_KEY);
-      xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
-      xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg');
-      xhr.upload.onprogress = (e) => {
-        if (dropLabel && e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          dropLabel.innerHTML = `Uploaden\u2026 ${pct}%`;
+
+    // Bestanden boven de bucket-limiet (50MB) knippen we zelf in stukken vóór het
+    // uploaden — de verwerk-functie plakt ze straks weer aan elkaar. Zo werkt dit
+    // ongeacht de lengte van de aflevering, zonder dat je hoeft te betalen voor een
+    // hogere Supabase-limiet.
+    const chunkCount = Math.max(1, Math.ceil(file.size / SN_MAX_CHUNK_BYTES));
+    const audioPaths = [];
+    let uploadedBytes = 0;
+    for (let i = 0; i < chunkCount; i++) {
+      const start = i * SN_MAX_CHUNK_BYTES;
+      const end = Math.min(start + SN_MAX_CHUNK_BYTES, file.size);
+      const chunkBlob = file.slice(start, end);
+      const storagePath = `${id}_${i}.${ext}`;
+      await uploadOneChunk(SB_URL, SB_KEY, authToken, storagePath, chunkBlob, file.type, (loaded) => {
+        if (dropLabel) {
+          const pct = Math.round(((uploadedBytes + loaded) / file.size) * 100);
+          dropLabel.innerHTML = `Uploaden\u2026 ${pct}%${chunkCount > 1 ? ` (deel ${i+1}/${chunkCount})` : ''}`;
         }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error('Upload mislukt (' + xhr.status + '). Grote bestanden kunnen even duren \u2014 probeer het zo nodig nogmaals.'));
-      };
-      xhr.onerror = () => reject(new Error('Upload mislukt door een netwerkfout.'));
-      xhr.send(file);
-    });
+      });
+      uploadedBytes += (end - start);
+      audioPaths.push(storagePath);
+    }
+
     if (dropLabel) dropLabel.innerHTML = 'Bezig met opslaan\u2026';
     const brandSel = document.getElementById('snBrandSelect');
-    await sbInsert('podcast_shownotes', [{ id, project_id: __snActiveProjectId, title: file.name.replace(/\.[^.]+$/, ''), audio_path: storagePath, status: 'uploaded', brand_id: (brandSel && brandSel.value) || null }]);
+    await sbInsert('podcast_shownotes', [{ id, project_id: __snActiveProjectId, title: file.name.replace(/\.[^.]+$/, ''), audio_path: audioPaths[0], audio_paths: audioPaths, status: 'uploaded', brand_id: (brandSel && brandSel.value) || null }]);
     await refreshShownotesList();
     // Meteen door naar verwerken, zodat je na uploaden niet ook nog handmatig op
     // "Verwerken" hoeft te klikken.
@@ -3059,12 +3081,13 @@ async function deleteShownotesEntry(id) {
   if (!requireOwner()) return;
   if (!confirm('Deze shownotes-aflevering verwijderen? De mp3 wordt ook verwijderd.')) return;
   try {
-    const row = (await sbSelect('podcast_shownotes', 'id=eq.' + id + '&select=audio_path'))[0];
+    const row = (await sbSelect('podcast_shownotes', 'id=eq.' + id + '&select=audio_path,audio_paths'))[0];
     await sbDelete('podcast_shownotes', 'id=eq.' + id);
-    if (row && row.audio_path) {
+    const paths = (row && row.audio_paths && row.audio_paths.length) ? row.audio_paths : (row && row.audio_path ? [row.audio_path] : []);
+    if (paths.length) {
       const { url: SB_URL, key: SB_KEY } = getConfig();
       const authToken = await getAuthToken();
-      fetch(`${SB_URL}/storage/v1/object/shownotes-audio/${row.audio_path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{});
+      paths.forEach(p => fetch(`${SB_URL}/storage/v1/object/shownotes-audio/${p}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + authToken } }).catch(()=>{}));
     }
     await refreshShownotesList();
   } catch (err) {
