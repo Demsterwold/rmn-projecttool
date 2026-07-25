@@ -47,12 +47,29 @@ async function transcribeBlob(blob, filename) {
   return text;
 }
 
-async function transcribeAudio(audioUrl, id) {
-  const audioRes = await fetch(audioUrl, {
+async function fetchStorageObject(path) {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/shownotes-audio/${path}`, {
     headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + process.env.SUPABASE_SERVICE_ROLE_KEY }
   });
-  if (!audioRes.ok) throw new Error('Kon audiobestand niet ophalen (' + audioRes.status + ')');
-  const arrayBuffer = await audioRes.arrayBuffer();
+  if (!res.ok) throw new Error('Kon audiobestand niet ophalen (' + res.status + ')');
+  return res.arrayBuffer();
+}
+
+function concatArrayBuffers(buffers) {
+  const total = buffers.reduce((sum, b) => sum + b.byteLength, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const b of buffers) { result.set(new Uint8Array(b), offset); offset += b.byteLength; }
+  return result.buffer;
+}
+
+async function transcribeAudio(audioPaths, id) {
+  // De upload-kant knipt grote bestanden zelf al in stukken van max ~40MB (onder de
+  // 50MB-limiet van de storage-bucket). Die stukken plakken we hier eerst weer aan
+  // elkaar tot één geheel, voordat we het zelf opnieuw (fijner, ~8MB) opdelen voor
+  // de transcriptie zelf.
+  const uploadChunks = await Promise.all(audioPaths.map(fetchStorageObject));
+  const arrayBuffer = uploadChunks.length > 1 ? concatArrayBuffers(uploadChunks) : uploadChunks[0];
   await setProgress(id, 10);
 
   // In stukken knippen
@@ -127,8 +144,8 @@ export default async (req) => {
     const projectName = projects[0] && projects[0].name;
 
     // 1. Transcriberen (parallel, met voortgang 10-60%)
-    const audioUrl = `${SUPABASE_URL}/storage/v1/object/shownotes-audio/${note.audio_path}`;
-    const transcript = await transcribeAudio(audioUrl, id);
+    const audioPaths = (note.audio_paths && note.audio_paths.length) ? note.audio_paths : [note.audio_path];
+    const transcript = await transcribeAudio(audioPaths, id);
     await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, { status: 'generating', transcript, progress: 65 });
 
     // 2. Shownotes laten schrijven, met het door de SEO-redacteur ingestelde prompt
