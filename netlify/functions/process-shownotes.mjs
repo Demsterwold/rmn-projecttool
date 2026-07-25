@@ -80,16 +80,18 @@ async function transcribeAudio(audioUrl, id) {
   return parts.map(p => p.text).join(' ');
 }
 
-async function generateShownotes(transcript, basePrompt, projectName) {
+async function generateShownotes(transcript, basePrompt, projectName, glossary) {
   const systemPrompt = `${basePrompt}
 
 Schrijf op basis van het transcript van deze podcastaflevering (${projectName || 'onbekende titel'}) shownotes.
 Let op het verschil tussen platformen:
 - Spotify/Apple Podcasts: max 4000 tekens, en de eerste ~150 tekens zijn het enige wat direct zichtbaar is voor "meer weergeven" verschijnt.
-- YouTube: max 5000 tekens, keyword-rijk, met hoofdstukken (chapters) die beginnen bij 0:00, elk hoofdstuk minimaal 10 seconden, en 3-5 relevante hashtags.
+- YouTube: max 5000 tekens, keyword-rijk, met hoofdstukken (chapters) die beginnen bij 0:00, elk hoofdstuk minimaal 10 seconden.
+Hoofdstukken: gebruik alleen de GROTE onderwerpswissels van de aflevering, niet elk subpunt. Streef naar 5 tot 10 hoofdstukken in totaal, ongeacht de lengte van de aflevering — meer dan 10 is bijna nooit nuttig voor een luisteraar/kijker.
+Voeg 3-5 relevante hashtags toe voor YouTube.
 Signaleer of er een host-read (advertentie/sponsorvermelding door de presentator) in het transcript zit; zo ja, stel een korte, scherpe advertentietekst voor met duidelijk disclosure-label ("Advertentie:") vlak bij de URL.
 Schrijf GEEN social-links, website-CTA of merk-outro zelf — dat voegt het systeem apart en automatisch toe.
-
+${glossary ? `\nBelangrijk: de audio-transcriptie maakt vaak fouten in namen en vaktermen. Gebruik voor de volgende namen/termen ALTIJD exact deze schrijfwijze, ook als het transcript een andere (foutieve) variant gebruikt:\n${glossary}\n` : ''}
 Geef ALLEEN geldige JSON terug, zonder uitleg ervoor of erna, in dit exacte formaat:
 {"hook":"...","shownotes_audio":"...","shownotes_youtube":"...","chapters":[{"time":"0:00","title":"..."}],"hashtags":["#voorbeeld"],"tags":["voorbeeld"],"hostread_detected":true,"hostread_text":"...","hostread_url":""}`;
 
@@ -130,10 +132,14 @@ export default async (req) => {
     await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, { status: 'generating', transcript, progress: 65 });
 
     // 2. Shownotes laten schrijven, met het door de SEO-redacteur ingestelde prompt
-    const promptRows = await sbAdmin('GET', 'app_settings?key=eq.shownotes_prompt&select=value');
+    const [promptRows, glossaryRows] = await Promise.all([
+      sbAdmin('GET', 'app_settings?key=eq.shownotes_prompt&select=value'),
+      sbAdmin('GET', 'app_settings?key=eq.names_glossary&select=value')
+    ]);
     const basePrompt = (promptRows[0] && promptRows[0].value) || 'Je bent SEO-redacteur voor RMN-podcasts.';
+    const glossary = glossaryRows[0] && glossaryRows[0].value;
     await setProgress(id, 80);
-    const result = await generateShownotes(transcript, basePrompt, projectName);
+    const result = await generateShownotes(transcript, basePrompt, projectName, glossary);
 
     // 3. Resultaat wegschrijven
     await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, {
