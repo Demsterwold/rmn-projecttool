@@ -117,7 +117,7 @@ Geef ALLEEN geldige JSON terug, zonder uitleg ervoor of erna, in dit exacte form
     headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: 'Transcript:\n\n' + transcript.slice(0, 100000) }]
     })
@@ -126,7 +126,15 @@ Geef ALLEEN geldige JSON terug, zonder uitleg ervoor of erna, in dit exacte form
   const data = await res.json();
   const raw = data.content?.[0]?.text || '{}';
   const cleaned = raw.replace(/```json|```/g, '').trim();
-  try { return JSON.parse(cleaned); } catch (e) { return {}; }
+  const stopReason = data.stop_reason;
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    // Stil doorgaan met lege shownotes verbergt precies dit soort fouten (zoals nu
+    // gebeurde). Beter: duidelijk laten mislukken zodat de status "error" wordt en
+    // je in de tool ziet wat er misging.
+    throw new Error('Kon Claude-antwoord niet als JSON lezen' + (stopReason === 'max_tokens' ? ' (output werd afgekapt door de max_tokens-limiet)' : '') + ': ' + cleaned.slice(0, 200));
+  }
 }
 
 export default async (req) => {
