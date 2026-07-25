@@ -2487,11 +2487,11 @@ function meetingNotesListHtml(projectId, notes) {
       <div class="meeting-card-date">${fmtDate(n.created_at)}</div>
       <div class="meeting-card-main">
         <span class="meeting-card-title">${escapeHtml(n.title || 'Meeting')}</span>
-        <span class="meeting-card-status">${STATUS_LABELS_MN[n.status] || n.status}</span>
+        <span class="meeting-card-status">${STATUS_LABELS_MN[n.status] || n.status}${n.status === 'transcribing' && n.progress ? ' \u2014 ' + n.progress + '%' : ''}</span>
       </div>
       <div class="meeting-card-actions">
         ${n.status === 'recorded' ? `<button class="small primary" onclick="event.stopPropagation(); processMeeting('${n.id}','${projectId}')">Verwerken</button>` : ''}
-        ${n.status === 'transcribing' ? `<button class="small" disabled onclick="event.stopPropagation()">Bezig\u2026</button>` : ''}
+        ${n.status === 'transcribing' ? `<button class="small" disabled onclick="event.stopPropagation()">Bezig\u2026 ${n.progress || 0}%</button>` : ''}
         ${(n.status === 'ready' || n.status === 'applied') ? `<button class="small" onclick="event.stopPropagation(); showTaskReviewModal('${n.id}','${projectId}')">Taken</button>` : ''}
         <span class="meeting-card-chevron">\u25BE</span>
         <button class="ghost small" onclick="event.stopPropagation(); deleteMeetingNote('${n.id}','${projectId}')">\u00d7</button>
@@ -2919,12 +2919,12 @@ function shownotesEntriesHtml(rows) {
     <div class="shownotes-row" data-sn-id="${r.id}">
       <div class="shownotes-row-main" ${r.status === 'ready' ? `onclick="showShownotesReviewModal('${r.id}')" style="cursor:pointer;"` : ''}>
         <span class="shownotes-row-title">${escapeHtml(r.title || 'Aflevering ' + fmtDate(r.created_at))}</span>
-        <span class="shownotes-row-status">${STATUS_LABELS_SN[r.status] || r.status}${r.error_message ? ' \u2014 ' + escapeHtml(r.error_message) : ''}</span>
+        <span class="shownotes-row-status">${STATUS_LABELS_SN[r.status] || r.status}${(r.status === 'transcribing' || r.status === 'generating') && r.progress ? ' \u2014 ' + r.progress + '%' : ''}${r.error_message ? ' \u2014 ' + escapeHtml(r.error_message) : ''}</span>
       </div>
       <div class="shownotes-row-actions">
         ${r.status === 'uploaded' || r.status === 'error' ? `<button class="small primary" onclick="processShownotes('${r.id}')">Verwerken</button>` : ''}
         ${r.status === 'ready' ? `<button class="small ghost" onclick="showShownotesReviewModal('${r.id}')">Bekijken</button>` : ''}
-        ${r.status === 'transcribing' || r.status === 'generating' ? `<button class="small" disabled>Bezig\u2026</button>` : ''}
+        ${r.status === 'transcribing' || r.status === 'generating' ? `<button class="small" disabled>Bezig\u2026 ${r.progress || 0}%</button>` : ''}
         <button class="small ghost" onclick="deleteShownotesEntry('${r.id}')">\u00d7</button>
       </div>
     </div>
@@ -2994,6 +2994,9 @@ async function uploadShownotesAudio(file) {
     const brandSel = document.getElementById('snBrandSelect');
     await sbInsert('podcast_shownotes', [{ id, project_id: __snActiveProjectId, title: file.name.replace(/\.[^.]+$/, ''), audio_path: storagePath, status: 'uploaded', brand_id: (brandSel && brandSel.value) || null }]);
     await refreshShownotesList();
+    // Meteen door naar verwerken, zodat je na uploaden niet ook nog handmatig op
+    // "Verwerken" hoeft te klikken.
+    processShownotes(id);
   } catch (err) {
     alert('Mp3 uploaden mislukt: ' + err.message);
   } finally {
