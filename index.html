@@ -284,6 +284,10 @@
   .shownotes-home-header h2 { margin: 0; }
   #shownotesHomeView { max-width: 720px; margin: 0 auto; padding: 24px 0; }
   #snBrandPreview { margin-top: 4px; }
+  .sn-platform-block { border-radius: var(--radius); padding: 14px 16px; margin: 18px 0; border: 1px solid var(--border); }
+  .sn-platform-audio { background: rgba(30, 215, 96, 0.06); border-color: rgba(30, 215, 96, 0.35); }
+  .sn-platform-youtube { background: rgba(255, 0, 0, 0.05); border-color: rgba(255, 0, 0, 0.3); }
+  .sn-platform-heading { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
   .sn-uploading { pointer-events: none; opacity: 0.7; border-color: var(--accent) !important; color: var(--accent) !important; }
   .record-panel { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 0; }
   .record-timer { font-family: var(--mono); font-size: 32px; font-weight: 700; color: var(--text); }
@@ -3085,12 +3089,13 @@ function wireCounter(fieldId, limit) {
 
 // Bouwt het vaste commerci\u00eble blok (website + socials) voor een merk, zodat dit
 // niet elke keer opnieuw hoeft te worden bedacht.
-function brandBlockText(brand) {
+function brandBlockText(brand, variant) {
   if (!brand) return '';
   const lines = [`\u2014`, `${brand.name}: ${brand.website_url || ''}`];
   const socials = brand.socials || {};
-  const socialParts = Object.entries(socials).filter(([,v]) => v).map(([k,v]) => `${k.charAt(0).toUpperCase()+k.slice(1)} ${v}`);
-  if (socialParts.length) lines.push('Volg ons: ' + socialParts.join(' \u00b7 '));
+  const mainSocials = ['instagram', 'tiktok'].filter(k => socials[k]).map(k => `${k.charAt(0).toUpperCase()+k.slice(1)} ${socials[k]}`);
+  if (mainSocials.length) lines.push('Volg ons: ' + mainSocials.join(' \u00b7 '));
+  if (variant === 'audio' && socials.youtube) lines.push('Bekijk ook op YouTube: ' + socials.youtube);
   return lines.join('\n');
 }
 
@@ -3098,14 +3103,16 @@ async function showShownotesReviewModal(id) {
   const n = (await sbSelect('podcast_shownotes', 'id=eq.' + id + '&select=*'))[0];
   if (!n) return;
   const brand = __snBrands.find(b => b.id === n.brand_id);
-  // Vast merkblok automatisch toevoegen als het er nog niet in staat, zodat je dit
-  // niet iedere keer opnieuw hoeft te typen.
+  const hook = (n.hook || '').trim();
+  // Hook + merkblok automatisch in de hoofdtekst zetten, zodat je in één keer een
+  // plak-klare tekst hebt in plaats van losse stukjes te moeten samenvoegen.
   let audioText = n.shownotes_audio || '';
   let youtubeText = n.shownotes_youtube || '';
+  if (hook && !audioText.trim().startsWith(hook)) audioText = hook + (audioText ? '\n\n' + audioText : '');
+  if (hook && !youtubeText.trim().startsWith(hook)) youtubeText = hook + (youtubeText ? '\n\n' + youtubeText : '');
   if (brand && brand.website_url) {
-    const block = brandBlockText(brand);
-    if (!audioText.includes(brand.website_url)) audioText = (audioText ? audioText + '\n\n' : '') + block;
-    if (!youtubeText.includes(brand.website_url)) youtubeText = (youtubeText ? youtubeText + '\n\n' : '') + block;
+    if (!audioText.includes(brand.website_url)) audioText = audioText + '\n\n' + brandBlockText(brand, 'audio');
+    if (!youtubeText.includes(brand.website_url)) youtubeText = youtubeText + '\n\n' + brandBlockText(brand, 'youtube');
   }
   const chapters = Array.isArray(n.chapters) ? n.chapters : [];
   const hashtags = Array.isArray(n.hashtags) ? n.hashtags.join(' ') : '';
@@ -3113,32 +3120,41 @@ async function showShownotesReviewModal(id) {
   renderModal(`
     <h2>Shownotes \u2014 ${escapeHtml(n.title || '')}</h2>
     <div class="sn-field">
-      <label>Hook (eerste zin, Spotify/Apple-preview) ${charCounterHtml('snHook', n.hook, 150)}</label>
+      <label>Hook (eerste zin \u2014 wordt automatisch bovenaan beide teksten gezet) ${charCounterHtml('snHook', n.hook, 150)}</label>
       <textarea id="snHook" style="min-height:50px;">${escapeHtml(n.hook || '')}</textarea>
     </div>
-    <div class="sn-field">
-      <label>Shownotes \u2014 Spotify / Apple Podcasts ${charCounterHtml('snAudio', audioText, 4000)}</label>
-      <textarea id="snAudio" style="min-height:160px;">${escapeHtml(audioText)}</textarea>
-      <button class="small ghost" style="margin-top:4px;" onclick="copySnField('snAudio')">\u{1F4CB} Kopi\u00ebren</button>
+
+    <div class="sn-platform-block sn-platform-audio">
+      <div class="sn-platform-heading">\u{1F3A7} Spotify &amp; Apple Podcasts</div>
+      <div class="sn-field">
+        <label>Volledige tekst (incl. hook &amp; merklink) ${charCounterHtml('snAudio', audioText, 4000)}</label>
+        <textarea id="snAudio" style="min-height:180px;">${escapeHtml(audioText)}</textarea>
+        <button class="small primary" style="margin-top:6px;" onclick="copySnField('snAudio')">\u{1F4CB} Kopieer volledige tekst</button>
+      </div>
     </div>
-    <div class="sn-field">
-      <label>Shownotes \u2014 YouTube ${charCounterHtml('snYoutube', youtubeText, 5000)}</label>
-      <textarea id="snYoutube" style="min-height:160px;">${escapeHtml(youtubeText)}</textarea>
-      <button class="small ghost" style="margin-top:4px;" onclick="copySnField('snYoutube')">\u{1F4CB} Kopi\u00ebren</button>
+
+    <div class="sn-platform-block sn-platform-youtube">
+      <div class="sn-platform-heading">\u25b6\ufe0f YouTube</div>
+      <div class="sn-field">
+        <label>Beschrijving (incl. hook &amp; merklink) ${charCounterHtml('snYoutube', youtubeText, 5000)}</label>
+        <textarea id="snYoutube" style="min-height:180px;">${escapeHtml(youtubeText)}</textarea>
+      </div>
+      <div class="sn-field">
+        <label>Hoofdstukken</label>
+        <div id="snChapters">${chapters.map((c, i) => chapterRowHtml(i, c)).join('') || chapterRowHtml(0, {time:'0:00', title:''})}</div>
+        <button class="small ghost" onclick="addChapterRow()">+ Hoofdstuk</button>
+      </div>
+      <div class="sn-field">
+        <label>Hashtags</label>
+        <input type="text" id="snHashtags" value="${escapeHtml(hashtags)}" placeholder="#podcast #ew #politiek">
+      </div>
+      <div class="sn-field">
+        <label>Tags (komma-gescheiden)</label>
+        <input type="text" id="snTags" value="${escapeHtml(tags)}" placeholder="podcast, ew, politiek">
+      </div>
+      <button class="small primary" onclick="copyFullYoutube()">\u{1F4CB} Kopieer alles voor YouTube (beschrijving + hoofdstukken + hashtags)</button>
     </div>
-    <div class="sn-field">
-      <label>Hoofdstukken (YouTube-formaat, tijd + titel)</label>
-      <div id="snChapters">${chapters.map((c, i) => chapterRowHtml(i, c)).join('') || chapterRowHtml(0, {time:'0:00', title:''})}</div>
-      <button class="small ghost" onclick="addChapterRow()">+ Hoofdstuk</button>
-    </div>
-    <div class="sn-field">
-      <label>Hashtags (YouTube, max 5)</label>
-      <input type="text" id="snHashtags" value="${escapeHtml(hashtags)}" placeholder="#podcast #ew #politiek">
-    </div>
-    <div class="sn-field">
-      <label>Tags (YouTube, komma-gescheiden)</label>
-      <input type="text" id="snTags" value="${escapeHtml(tags)}" placeholder="podcast, ew, politiek">
-    </div>
+
     <div class="sn-field">
       <label><input type="checkbox" id="snHostreadOn" ${n.hostread_detected ? 'checked' : ''}> Host-read in deze aflevering</label>
       <div class="sn-hostread-box">
@@ -3188,12 +3204,26 @@ function copySnField(fieldId) {
   const el = document.getElementById(fieldId);
   navigator.clipboard.writeText(el.value).then(() => {}, () => alert('Kopi\u00ebren niet gelukt \u2014 selecteer en kopieer handmatig.'));
 }
+function copyFullYoutube() {
+  const body = document.getElementById('snYoutube').value;
+  const chapterLines = Array.from(document.querySelectorAll('#snChapters .sn-chapter-row')).map(row => {
+    const t = row.querySelector('.sn-ch-time').value.trim();
+    const ti = row.querySelector('.sn-ch-title').value.trim();
+    return ti ? `${t} ${ti}` : '';
+  }).filter(Boolean);
+  const hashtags = document.getElementById('snHashtags').value.trim();
+  const parts = [body];
+  if (chapterLines.length) parts.push(chapterLines.join('\n'));
+  if (hashtags) parts.push(hashtags);
+  navigator.clipboard.writeText(parts.join('\n\n')).then(() => {}, () => alert('Kopi\u00ebren niet gelukt \u2014 selecteer en kopieer handmatig.'));
+}
 
 // ---- Instellingen: shownotes-prompt + merkprofielen (alleen zichtbaar/klikbaar voor de eigenaar) ----
 async function showShownotesSettingsModal() {
   if (!requireOwner()) return;
-  const [promptRow, brands] = await Promise.all([
+  const [promptRow, glossaryRow, brands] = await Promise.all([
     sbSelect('app_settings', 'key=eq.shownotes_prompt&select=value').then(r => r[0]).catch(() => null),
+    sbSelect('app_settings', 'key=eq.names_glossary&select=value').then(r => r[0]).catch(() => null),
     sbSelect('brand_profiles', 'select=*&order=name.asc').catch(() => [])
   ]);
   __snBrands = brands || [];
@@ -3202,6 +3232,11 @@ async function showShownotesSettingsModal() {
     <div class="sn-field">
       <label>Agentprompt (SEO-redacteur)</label>
       <textarea id="snPromptInput" style="min-height:160px;">${escapeHtml((promptRow && promptRow.value) || '')}</textarea>
+    </div>
+    <div class="sn-field">
+      <label>Namen & termen (voorkomt transcriptiefouten)</label>
+      <textarea id="snGlossaryInput" style="min-height:100px;" placeholder="Bijv.: Frederik van Lanschot (niet: Frederiek van Gint van Den)&#10;Ronald de Zoete (niet: Ronald de Zouten)&#10;Karel Berkhout (niet: Karel Bergs)">${escapeHtml((glossaryRow && glossaryRow.value) || '')}</textarea>
+      <div class="hint">Eén naam/term per regel. Wordt bij elke aflevering meegegeven zodat de AI niet steeds dezelfde fouten maakt.</div>
     </div>
     <div class="sn-field">
       <label>Merkprofielen</label>
@@ -3213,7 +3248,10 @@ async function showShownotesSettingsModal() {
   document.getElementById('modalCancel').onclick = closeModal;
   document.getElementById('modalSave').onclick = async () => {
     try {
-      await sb('POST', 'app_settings', [{ key: 'shownotes_prompt', value: document.getElementById('snPromptInput').value, updated_at: new Date().toISOString() }], 'resolution=merge-duplicates');
+      await sb('POST', 'app_settings', [
+        { key: 'shownotes_prompt', value: document.getElementById('snPromptInput').value, updated_at: new Date().toISOString() },
+        { key: 'names_glossary', value: document.getElementById('snGlossaryInput').value, updated_at: new Date().toISOString() }
+      ], 'resolution=merge-duplicates');
       closeModal();
     } catch (err) { alert('Opslaan mislukt: ' + err.message); }
   };
@@ -3233,6 +3271,7 @@ async function showAddBrandModal(brandId) {
     <div class="field"><label>Website-URL</label><input type="text" id="brWebsite" value="${escapeHtml(b ? b.website_url || '' : '')}" placeholder="https://\u2026"></div>
     <div class="field"><label>Instagram</label><input type="text" id="brInsta" value="${escapeHtml(socials.instagram || '')}" placeholder="https://\u2026"></div>
     <div class="field"><label>TikTok</label><input type="text" id="brTiktok" value="${escapeHtml(socials.tiktok || '')}" placeholder="https://\u2026"></div>
+    <div class="field"><label>YouTube-kanaal (belangrijk voor YouTube-shownotes)</label><input type="text" id="brYoutube" value="${escapeHtml(socials.youtube || '')}" placeholder="https://\u2026"></div>
     <div class="field"><label>Disclosure-label (bij host-read)</label><input type="text" id="brDisclosure" value="${escapeHtml(b ? b.disclosure_label || 'Advertentie:' : 'Advertentie:')}"></div>
     <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
   `);
@@ -3242,7 +3281,7 @@ async function showAddBrandModal(brandId) {
       id: brandId || uid('brand'),
       name: document.getElementById('brName').value.trim(),
       website_url: document.getElementById('brWebsite').value.trim(),
-      socials: { instagram: document.getElementById('brInsta').value.trim(), tiktok: document.getElementById('brTiktok').value.trim() },
+      socials: { instagram: document.getElementById('brInsta').value.trim(), tiktok: document.getElementById('brTiktok').value.trim(), youtube: document.getElementById('brYoutube').value.trim() },
       disclosure_label: document.getElementById('brDisclosure').value.trim() || 'Advertentie:'
     };
     if (!row.name) { alert('Vul een naam in.'); return; }
