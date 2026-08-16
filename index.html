@@ -3319,8 +3319,9 @@ async function showShownotesSettingsModal() {
       <textarea id="snPromptInput" style="min-height:160px;">${escapeHtml((promptRow && promptRow.value) || '')}</textarea>
     </div>
     <div class="sn-field">
-      <label>Namen & termen (voorkomt transcriptiefouten)</label>
-      <textarea id="snGlossaryInput" style="min-height:100px;" placeholder="Bijv.: Frederik van Lanschot (niet: Frederiek van Gint van Den)&#10;Ronald de Zoete (niet: Ronald de Zouten)&#10;Karel Berkhout (niet: Karel Bergs)">${escapeHtml((glossaryRow && glossaryRow.value) || '')}</textarea>
+      <label>Namen & termen die online niet te vinden zijn (bijv. redacteuren)</label>
+      <textarea id="snGlossaryInput" style="min-height:100px;" placeholder="De AI checkt namen nu automatisch online. Gebruik dit veld alleen voor namen die daar niet bij te vinden zijn, bijv.:&#10;Karel Berkhout (interne redacteur, niet online te vinden)">${escapeHtml((glossaryRow && glossaryRow.value) || '')}</textarea>
+      <div class="hint">Voor bekende personen zoekt de AI zelf de juiste spelling op. Dit veld is voor namen die online niet te verifiëren zijn.</div>
       <div class="hint">Eén naam/term per regel. Wordt bij elke aflevering meegegeven zodat de AI niet steeds dezelfde fouten maakt.</div>
     </div>
     <div class="sn-field">
