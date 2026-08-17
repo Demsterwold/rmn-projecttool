@@ -3247,6 +3247,10 @@ async function showShownotesReviewModal(id) {
         <input type="text" id="snHostreadUrl" value="${escapeHtml(n.hostread_url || '')}" placeholder="https://\u2026" style="margin-top:6px;">
       </div>
     </div>
+    <details class="sn-field">
+      <summary style="cursor:pointer; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-faint);">Transcript bekijken (met tijdstempels, voor controle)</summary>
+      <textarea readonly style="min-height:200px; margin-top:8px; font-family:var(--mono); font-size:12px;">${escapeHtml(n.transcript || 'Geen transcript beschikbaar.')}</textarea>
+    </details>
     <div class="modal-actions"><button class="ghost" id="modalCancel">Sluiten</button><button class="primary" id="modalSave">Opslaan</button></div>
   `);
   wireCounter('snHook', 150); wireCounter('snAudio', 4000); wireCounter('snYoutube', 5000);
