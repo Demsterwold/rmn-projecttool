@@ -116,6 +116,51 @@ async function transcribeAudio(audioPaths, id) {
   return allLines.join('\n');
 }
 
+// STAP 1 van 2: alleen namen controleren, met websearch. Kleine, gerichte taak —
+// klein risico dat de AI in een lange samenvatting blijft hangen, omdat er weinig te
+// zeggen valt na het zoeken (alleen een kort lijstje correcties).
+async function verifyNames(timestampedTranscript, glossary) {
+  const systemPrompt = `Je krijgt het transcript van een Nederlandse podcastaflevering. Gebruik de websearch-tool om de namen van de HOOFDSPREKERS (presentator en gasten) online te controleren op de juiste spelling. Voor namen die slechts kort/terloops genoemd worden hoeft dit niet.
+${glossary ? `\nDe volgende namen zijn al bevestigd door de redactie, sla deze over bij het zoeken en gebruik altijd exact deze schrijfwijze:\n${glossary}\n` : ''}
+Zodra je klaar bent met zoeken, schrijf je GEEN toelichting of samenvatting. Je laatste bericht is UITSLUITEND een JSON-array met correcties, in dit exacte formaat (leeg lijstje als er niets te corrigeren valt):
+[{"wrong":"tekst zoals in transcript","correct":"juiste spelling"}]`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      system: systemPrompt,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role: 'user', content: 'Transcript:\n\n' + timestampedTranscript.slice(0, 60000) }]
+    })
+  });
+  if (!res.ok) return []; // naamcontrole is een bonus, geen kritiek onderdeel — bij falen gewoon doorgaan zonder correcties
+  const data = await res.json();
+  const textBlocks = (data.content || []).filter(b => b.type === 'text');
+  const raw = textBlocks.length ? textBlocks[textBlocks.length - 1].text : '[]';
+  const cleaned = raw.replace(/```json|```/g, '').trim();
+  try { return JSON.parse(cleaned); }
+  catch (e) {
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    if (match) { try { return JSON.parse(match[0]); } catch (e2) {} }
+    return [];
+  }
+}
+
+function applyNameCorrections(transcript, corrections) {
+  let result = transcript;
+  for (const c of corrections) {
+    if (!c.wrong || !c.correct || c.wrong === c.correct) continue;
+    result = result.split(c.wrong).join(c.correct);
+  }
+  return result;
+}
+
+// STAP 2 van 2: de eigenlijke shownotes schrijven. GEEN tools hier — dat maakt de
+// JSON-output betrouwbaar, want er is geen risico meer dat de AI na zoekopdrachten
+// in een lange samenvatting blijft hangen in plaats van de JSON af te leveren.
 async function generateShownotes(timestampedTranscript, basePrompt, projectName, glossary) {
   const systemPrompt = `${basePrompt}
 
@@ -123,7 +168,7 @@ Schrijf op basis van het transcript van deze podcastaflevering (${projectName ||
 
 BELANGRIJK — het transcript hieronder bevat op elke regel een ECHT gemeten tijdstip vooraan, in het formaat "[MM:SS] tekst". Voor de hoofdstukken in het "chapters"-veld mag je UITSLUITEND een tijdstip gebruiken dat letterlijk zo in het transcript voorkomt (kopieer het exact van de regel waar dat hoofdstuk begint). Verzin, rond af of schat NOOIT zelf een tijdstip — als je twijfelt welke regel het beste startpunt is, kies de dichtstbijzijnde regel en gebruik precies dat tijdstip.
 
-BELANGRIJK — gebruik de websearch-tool om ELKE persoonsnaam die in het transcript voorkomt (presentator, gasten, genoemde personen) online te controleren op de juiste spelling, vooral bij namen die er foutief getranscribeerd uit kunnen zien. Pas de schrijfwijze in je shownotes ALLEEN aan als je online duidelijk bewijs vindt van de correcte spelling (bijvoorbeeld een LinkedIn-profiel, nieuwsartikel, of officiële bron). Vind je geen duidelijk bewijs, gebruik dan de schrijfwijze zoals die in het transcript staat — verzin nooit zelf een correctie.
+De namen in dit transcript zijn al online geverifieerd en gecorrigeerd waar nodig — je hoeft zelf niets meer te controleren, gebruik de spelling zoals die hier staat.
 
 Let op het verschil tussen platformen:
 - Spotify/Apple Podcasts: max 4000 tekens, en de eerste ~150 tekens zijn het enige wat direct zichtbaar is voor "meer weergeven" verschijnt.
@@ -132,8 +177,8 @@ Hoofdstukken: gebruik alleen de GROTE onderwerpswissels van de aflevering, niet 
 Voeg 3-5 relevante hashtags toe voor YouTube.
 Signaleer of er een host-read (advertentie/sponsorvermelding door de presentator) in het transcript zit; zo ja, stel een korte, scherpe advertentietekst voor met duidelijk disclosure-label ("Advertentie:") vlak bij de URL.
 Schrijf GEEN social-links, website-CTA of merk-outro zelf — dat voegt het systeem apart en automatisch toe.
-${glossary ? `\nDe volgende namen/termen zijn vooraf bevestigd door de redactie (dit zijn vaak redacteuren die online lastig te vinden zijn) — gebruik voor deze ALTIJD exact deze schrijfwijze, zonder ze zelf nog te hoeven verifiëren:\n${glossary}\n` : ''}
-Nadat je klaar bent met eventuele zoekopdrachten, geef je ALLEEN geldige JSON terug als allerlaatste bericht, zonder uitleg ervoor of erna, in dit exacte formaat:
+${glossary ? `\nDe volgende namen/termen zijn vooraf bevestigd door de redactie:\n${glossary}\n` : ''}
+Geef ALLEEN geldige JSON terug, zonder uitleg ervoor of erna, in dit exacte formaat:
 {"hook":"...","shownotes_audio":"...","shownotes_youtube":"...","chapters":[{"time":"0:00","title":"..."}],"hashtags":["#voorbeeld"],"tags":["voorbeeld"],"hostread_detected":true,"hostread_text":"...","hostread_url":""}`;
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -143,26 +188,21 @@ Nadat je klaar bent met eventuele zoekopdrachten, geef je ALLEEN geldige JSON te
       model: 'claude-sonnet-4-6',
       max_tokens: 8000,
       system: systemPrompt,
-      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages: [{ role: 'user', content: 'Transcript (met tijdstempels):\n\n' + timestampedTranscript.slice(0, 100000) }]
     })
   });
   if (!res.ok) { const t = await res.text(); throw new Error('Claude-fout: ' + t.slice(0, 300)); }
   const data = await res.json();
-
-  // Bij gebruik van tools kan de content meerdere blokken bevatten (zoekopdrachten,
-  // zoekresultaten, tussentekst) — het laatste tekstblok is het uiteindelijke
-  // JSON-antwoord, niet per se content[0].
-  const textBlocks = (data.content || []).filter(b => b.type === 'text');
-  const raw = textBlocks.length ? textBlocks[textBlocks.length - 1].text : '{}';
+  const raw = data.content?.[0]?.text || '{}';
   const cleaned = raw.replace(/```json|```/g, '').trim();
   const stopReason = data.stop_reason;
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    // Stil doorgaan met lege shownotes verbergt precies dit soort fouten. Beter:
-    // duidelijk laten mislukken zodat de status "error" wordt en je in de tool ziet
-    // wat er misging.
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      try { return JSON.parse(match[0]); } catch (e2) {}
+    }
     throw new Error('Kon Claude-antwoord niet als JSON lezen' + (stopReason === 'max_tokens' ? ' (output werd afgekapt door de max_tokens-limiet)' : '') + ': ' + cleaned.slice(0, 200));
   }
 }
@@ -186,17 +226,22 @@ export default async (req) => {
     const timestampedTranscript = await transcribeAudio(audioPaths, id);
     await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, { status: 'generating', transcript: timestampedTranscript, progress: 65 });
 
-    // 2. Shownotes laten schrijven, met het door de SEO-redacteur ingestelde prompt
+    // 2. Namen online verifiëren (aparte, kleine stap) en corrigeren in het transcript
     const [promptRows, glossaryRows] = await Promise.all([
       sbAdmin('GET', 'app_settings?key=eq.shownotes_prompt&select=value'),
       sbAdmin('GET', 'app_settings?key=eq.names_glossary&select=value')
     ]);
     const basePrompt = (promptRows[0] && promptRows[0].value) || 'Je bent SEO-redacteur voor RMN-podcasts.';
     const glossary = glossaryRows[0] && glossaryRows[0].value;
-    await setProgress(id, 80);
-    const result = await generateShownotes(timestampedTranscript, basePrompt, projectName, glossary);
+    await setProgress(id, 70);
+    const corrections = await verifyNames(timestampedTranscript, glossary);
+    const correctedTranscript = applyNameCorrections(timestampedTranscript, corrections);
 
-    // 3. Resultaat wegschrijven
+    // 3. Shownotes laten schrijven, met het door de SEO-redacteur ingestelde prompt
+    await setProgress(id, 80);
+    const result = await generateShownotes(correctedTranscript, basePrompt, projectName, glossary);
+
+    // 4. Resultaat wegschrijven
     await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + id, {
       status: 'ready',
       progress: 100,
