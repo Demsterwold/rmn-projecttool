@@ -482,7 +482,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-15 10:25</div>
+<div class="build-tag">build 2026-07-15 11:00</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -2424,29 +2424,111 @@ async function processMiscNotes() {
   btn.disabled = true; btn.textContent = 'Bezig\u2026';
   try {
     const categories = await sbSelect('personal_todo_categories', 'select=id,name&order=order_num.asc');
+    const catList = categories.length ? categories.slice() : [{id:'overig',name:'Overig'}];
     const res = await fetch('/.netlify/functions/extract-personal-todos', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, categories: categories.length ? categories : [{id:'overig',name:'Overig'}] })
+      body: JSON.stringify({ text, categories: catList })
     });
     if (!res.ok) throw new Error('Functie nog niet beschikbaar (status ' + res.status + '). Is extract-personal-todos.mjs al gedeployed?');
     const { tasks } = await res.json();
     if (!tasks || !tasks.length) { alert('Geen duidelijke taken gevonden in deze notitie.'); btn.disabled = false; btn.textContent = 'Verwerk naar taken'; return; }
-    const rows = await sbSelect('personal_todos', 'select=category,order_num&order=order_num.desc');
-    const maxOrderByCategory = {};
-    rows.forEach(r => { const c = r.category || 'overig'; if (!(c in maxOrderByCategory) || r.order_num > maxOrderByCategory[c]) maxOrderByCategory[c] = r.order_num; });
-    const inserts = tasks.map(t => {
-      const cat = t.category || 'overig';
-      maxOrderByCategory[cat] = (maxOrderByCategory[cat] || 0) + 1;
-      return { id: uid('pt'), text: t.text, category: cat, order_num: maxOrderByCategory[cat], subtasks: [] };
+    // De AI mag zelf een nieuwe kolomnaam voorstellen (i.p.v. alles in "Overig" te proppen).
+    // Die kolommen maken we hier automatisch klaar \u2014 taken met dezelfde voorgestelde naam
+    // delen dezelfde (nog niet opgeslagen) kolom.
+    const newCatByName = {};
+    tasks.forEach(t => {
+      if (!t.category && t.new_category_name) {
+        const key = t.new_category_name.trim().toLowerCase();
+        if (!newCatByName[key]) {
+          const newCat = { id: uid('cat'), name: t.new_category_name.trim() };
+          newCatByName[key] = newCat;
+          catList.push(newCat);
+        }
+        t.category = newCatByName[key].id;
+      } else if (!t.category) {
+        t.category = 'overig';
+      }
     });
-    await sbInsert('personal_todos', inserts);
-    input.value = '';
-    loadPersonalTodos();
+    if (!catList.some(c => c.id === 'overig')) catList.push({ id: 'overig', name: 'Overig' });
+    showMiscTaskReviewModal(tasks, catList);
   } catch (err) {
     alert('Verwerken mislukt: ' + err.message);
   } finally {
     btn.disabled = false; btn.textContent = 'Verwerk naar taken';
   }
+}
+// __NEW_CATEGORY__ is een speciale waarde in de kolom-keuzemenu's die een prompt opent
+// om ter plekke een compleet nieuwe kolom aan te maken, zonder het venster te verlaten.
+function miscTaskReviewRowHtml(task, idx, catList) {
+  return `
+    <div class="field" data-task-idx="${idx}">
+      <input type="text" id="miscTaskText_${idx}" value="${escapeHtml(task.text).replace(/"/g,'&quot;')}" style="margin-bottom:4px;">
+      <select id="miscTaskCat_${idx}" onchange="handleMiscTaskCatChange(${idx})">
+        ${catList.map(c => `<option value="${c.id}" ${c.id === (task.category||'overig') ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+        <option value="__NEW_CATEGORY__">+ Nieuwe kolom\u2026</option>
+      </select>
+    </div>
+  `;
+}
+function showMiscTaskReviewModal(tasks, catList) {
+  window.__miscReviewCatList = catList.slice();
+  renderModal(`
+    <h2>Taken controleren</h2>
+    <div class="hint">Pas de tekst of kolom aan waar nodig, of maak via het keuzemenu een nieuwe kolom aan.</div>
+    <div id="miscTaskReviewList">${tasks.map((t, i) => miscTaskReviewRowHtml(t, i, catList)).join('')}</div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalAdd">Taken toevoegen</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalAdd').onclick = async () => {
+    const btn = document.getElementById('modalAdd');
+    btn.disabled = true; btn.textContent = 'Bezig\u2026';
+    try {
+      const rows = tasks.map((t, i) => ({
+        text: document.getElementById('miscTaskText_' + i).value.trim(),
+        category: document.getElementById('miscTaskCat_' + i).value
+      })).filter(r => r.text);
+      // Nieuwe kolommen (aangemaakt tijdens dit controle-scherm) staan al in __miscReviewCatList
+      // maar nog niet altijd in de database \u2014 die zetten we hier alsnog weg.
+      const existingIds = new Set((await sbSelect('personal_todo_categories', 'select=id')).map(c => c.id));
+      const toCreate = window.__miscReviewCatList.filter(c => !existingIds.has(c.id));
+      if (toCreate.length) {
+        const orderRows = await sbSelect('personal_todo_categories', 'select=order_num&order=order_num.desc&limit=1');
+        let maxOrder = orderRows.length ? orderRows[0].order_num : 0;
+        await sbInsert('personal_todo_categories', toCreate.map(c => ({ id: c.id, name: c.name, order_num: ++maxOrder })));
+      }
+      const orderRowsByCat = await sbSelect('personal_todos', 'select=category,order_num&order=order_num.desc');
+      const maxOrderByCategory = {};
+      orderRowsByCat.forEach(r => { const c = r.category || 'overig'; if (!(c in maxOrderByCategory) || r.order_num > maxOrderByCategory[c]) maxOrderByCategory[c] = r.order_num; });
+      const inserts = rows.map(r => {
+        const cat = r.category || 'overig';
+        maxOrderByCategory[cat] = (maxOrderByCategory[cat] || 0) + 1;
+        return { id: uid('pt'), text: r.text, category: cat, order_num: maxOrderByCategory[cat], subtasks: [] };
+      });
+      if (inserts.length) await sbInsert('personal_todos', inserts);
+      closeModal();
+      document.getElementById('miscNotesInput').value = '';
+      loadPersonalTodos();
+    } catch (err) {
+      alert('Toevoegen mislukt: ' + err.message);
+      btn.disabled = false; btn.textContent = 'Taken toevoegen';
+    }
+  };
+}
+function handleMiscTaskCatChange(idx) {
+  const select = document.getElementById('miscTaskCat_' + idx);
+  if (select.value !== '__NEW_CATEGORY__') return;
+  const name = prompt('Naam voor de nieuwe kolom:');
+  if (!name || !name.trim()) { select.value = 'overig'; return; }
+  const newId = uid('cat');
+  window.__miscReviewCatList.push({ id: newId, name: name.trim() });
+  // Deze nieuwe kolom-optie ook meteen in ALLE andere taak-keuzemenu's in dit venster
+  // aanbieden, voor het geval meerdere taken in dezelfde nieuwe kolom horen.
+  document.querySelectorAll('[id^="miscTaskCat_"]').forEach(sel => {
+    const opt = document.createElement('option');
+    opt.value = newId; opt.textContent = name.trim();
+    sel.insertBefore(opt, sel.lastElementChild);
+  });
+  select.value = newId;
 }
 async function addPersonalTodo(category) {
   if (!requireOwner()) return;
