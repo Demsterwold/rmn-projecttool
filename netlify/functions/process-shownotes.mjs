@@ -148,32 +148,46 @@ export default async (req) => {
 
 ${namesGlossary ? `Namen/termen die online niet goed te verifi\u00ebren zijn, gebruik deze spelling: ${namesGlossary}\n\n` : ''}BELANGRIJK: hoofdstuktijden mag je UITSLUITEND letterlijk overnemen uit de "[MM:SS]"-tijdstempels die in het transcript staan. Verzin of bereken nooit zelf een tijd.
 
-BELANGRIJK: geef ALTIJD alleen het JSON-object terug, ongeacht hoe kort, onduidelijk of ongebruikelijk het transcript is. Ook bij een heel korte of testachtige opname: doe gewoon je best met wat er is en vul het JSON-formaat in \u2014 geef nooit uitleg, een verontschuldiging, of een vraag om verduidelijking in plaats van JSON.
+Ook bij een heel korte, onduidelijke of testachtige opname: doe gewoon je best met wat er is en vul elk veld in.
 
 Transcript (met tijdstempels per zin):
 """
 ${transcript}
 """`;
 
-    // Prefill-techniek: door het antwoord van het model zelf te laten beginnen met "{",
-    // kan het bijna niet meer uitwijken naar uitleg of een inleidende zin in plaats van
-    // meteen geldige JSON \u2014 dit is de meest betrouwbare manier om dit af te dwingen.
+    // Structured outputs: dwingt een antwoord af dat exact aan dit schema voldoet, dus
+    // gegarandeerd geldige JSON. (De eerder gebruikte "prefill"-truc \u2014 het antwoord
+    // laten beginnen met "{" \u2014 wordt door dit model niet meer ondersteund en gaf een
+    // 400-fout; structured outputs is de door Anthropic aanbevolen vervanging.)
+    const shownotesSchema = {
+      type: 'object',
+      properties: {
+        hook: { type: 'string' },
+        shownotes_audio: { type: 'string' },
+        shownotes_youtube: { type: 'string' },
+        chapters: { type: 'array', items: { type: 'object', properties: { time: { type: 'string' }, title: { type: 'string' } }, required: ['time','title'], additionalProperties: false } },
+        hashtags: { type: 'array', items: { type: 'string' } },
+        tags: { type: 'array', items: { type: 'string' } },
+        hostread_detected: { type: 'boolean' },
+        hostread_text: { type: 'string' },
+        hostread_url: { type: 'string' }
+      },
+      required: ['hook','shownotes_audio','shownotes_youtube','chapters','hashtags','tags','hostread_detected','hostread_text','hostread_url'],
+      additionalProperties: false
+    };
     async function callClaudeForShownotes() {
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6', max_tokens: 8000,
-          messages: [
-            { role: 'user', content: fullPrompt },
-            { role: 'assistant', content: '{' }
-          ]
+          messages: [{ role: 'user', content: fullPrompt }],
+          output_config: { format: { type: 'json_schema', schema: shownotesSchema } }
         })
       });
       if (!claudeRes.ok) { const t = await claudeRes.text(); throw new Error('Claude-fout: ' + t.slice(0, 300)); }
       const claudeData = await claudeRes.json();
-      const continuation = (claudeData.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n') || '';
-      return '{' + continuation; // de "{" die we lieten voorinvullen zit niet in het antwoord, dus terugzetten
+      return (claudeData.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n') || '';
     }
 
     let parsed = null;
