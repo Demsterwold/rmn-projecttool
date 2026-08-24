@@ -534,7 +534,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-08-24 16:45</div>
+<div class="build-tag">build 2026-08-24 17:15</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -1526,6 +1526,7 @@ function shownoteItemHtml(row) {
       </div>
       ${(row.status === 'transcribing' || row.status === 'generating') ? `<div class="shownotes-item-progress"><div class="shownotes-item-progress-fill" style="width:${row.progress||0}%"></div></div>` : ''}
       <span class="shownotes-status-badge sn-status-${row.status}">${SN_STATUS_LABELS[row.status] || row.status}</span>
+      ${(isOwner && row.status === 'error') ? `<button class="small" onclick="event.stopPropagation(); processShownoteUI('${row.id}')">Opnieuw proberen</button>` : ''}
       ${isOwner ? `<button class="shownotes-item-delete" title="Verwijderen" onclick="event.stopPropagation(); deleteShownoteUI('${row.id}')">\u00d7</button>` : ''}
     </div>
   `;
