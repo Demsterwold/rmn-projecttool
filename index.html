@@ -57,17 +57,6 @@
   .cal-chip { font-size: 10px; padding: 2px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; color: #0c1220; font-weight: 600; }
   .year-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   @media (max-width: 700px) { .year-grid { grid-template-columns: repeat(2, 1fr); } }
-  .cal-band-grid-week { padding: 0 0 4px; }
-  .cal-week-grid { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid var(--border); }
-  .cal-week-day { border-right: 1px solid var(--border); padding: 8px; min-height: 140px; }
-  .cal-week-day:last-child { border-right: none; }
-  .cal-week-day.today { background: rgba(91,143,244,0.06); }
-  .cal-week-day-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
-  .cal-week-day-name { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
-  .cal-week-day.today .cal-daynum { background: var(--red); color: #fff; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
-  .cal-week-day-items { display: flex; flex-direction: column; gap: 4px; }
-  .cal-week-day-empty { font-size: 11px; color: var(--text-faint); }
-  @media (max-width: 700px) { .cal-week-grid { grid-template-columns: 1fr; } .cal-week-day { border-right: none; border-bottom: 1px solid var(--border); min-height: unset; } }
   .year-month-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; min-height: 110px; }
   .year-month-card.current { border-color: var(--accent); }
   .year-month-label { font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
@@ -493,7 +482,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-15 10:05</div>
+<div class="build-tag">build 2026-07-15 10:20</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -1062,34 +1051,37 @@ function renderWeekCalendar(containerId, projects) {
   const week = []; for (let i=0;i<7;i++) { const d = new Date(monday); d.setDate(d.getDate()+i); week.push(d); }
   const today = new Date();
   const weekLabel = week[0].toLocaleDateString('nl-NL',{day:'numeric',month:'short'}) + ' \u2013 ' + week[6].toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'});
+
+  const daynumCells = week.map(day => {
+    const isToday = isSameDay(day, today);
+    return `<div class="cal-daynum-cell ${isToday?'today':''}"><span class="cal-daynum">${day.getDate()}</span></div>`;
+  }).join('');
   const bandRows = computeWeekBands(week, projects);
   const bandRowsHtml = bandRows.map(row => `
-    <div class="cal-band-grid cal-band-grid-week">
-      ${row.map(b => `<div class="cal-band" style="background:${b.color};color:#fff;grid-column:${b.colStart+1} / ${b.colEnd+2}" onclick="openProject('${b.id}')" title="${escapeHtml(b.label)}">${escapeHtml(b.label)}</div>`).join('')}
+    <div class="cal-band-grid">
+      ${row.map(b => `<div class="cal-band" style="grid-column:${b.colStart+1} / ${b.colEnd+2};border:1.5px solid ${b.color};color:${b.color};background:var(--panel)" onclick="openProject('${b.id}')" title="${escapeHtml(b.label)}">${escapeHtml(b.label)}</div>`).join('')}
     </div>
   `).join('');
-  const dayColsHtml = week.map(day => {
-    const isToday = isSameDay(day, today);
+  // In de weekweergave is er meer ruimte per dag, dus tonen we alles (geen "+N meer"-afkapping zoals in de maandweergave).
+  const singleCells = week.map(day => {
     const items = singleDayItemsForDay(day, projects);
-    const dayLabel = day.toLocaleDateString('nl-NL', {weekday:'short'});
-    return `
-      <div class="cal-week-day ${isToday?'today':''}">
-        <div class="cal-week-day-head"><span class="cal-week-day-name">${dayLabel}</span> <span class="cal-daynum">${day.getDate()}</span></div>
-        <div class="cal-week-day-items">
-          ${items.map(e => `<div class="cal-chip" style="background:${e.color}" onclick="openProject('${e.id}')" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</div>`).join('')}
-          ${!items.length ? '<div class="cal-week-day-empty">\u2014</div>' : ''}
-        </div>
-      </div>
-    `;
+    return `<div class="cal-single-cell">
+      ${items.map(e => `<div class="cal-chip" style="background:${e.color}" onclick="openProject('${e.id}')" title="${escapeHtml(e.label)}">${escapeHtml(e.label)}</div>`).join('')}
+    </div>`;
   }).join('');
+
   container.innerHTML = `
     <div class="cal-controls">
       <div class="cal-title">${weekLabel.charAt(0).toUpperCase()+weekLabel.slice(1)}</div>
       <div class="cal-nav">${calModeToggleHtml()}<button class="icon" id="calPrev">\u2190</button><button class="small" id="calToday">Vandaag</button><button class="icon" id="calNext">\u2192</button></div>
     </div>
     <div class="cal-grid">
-      ${bandRowsHtml}
-      <div class="cal-week-grid">${dayColsHtml}</div>
+      <div class="cal-weekdays"><div>Ma</div><div>Di</div><div>Wo</div><div>Do</div><div>Vr</div><div>Za</div><div>Zo</div></div>
+      <div class="cal-week-wrap">
+        <div class="cal-daynum-grid">${daynumCells}</div>
+        ${bandRowsHtml}
+        <div class="cal-single-grid">${singleCells}</div>
+      </div>
     </div>
   `;
   wireCalControls(containerId, projects);
