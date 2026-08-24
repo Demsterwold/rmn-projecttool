@@ -482,7 +482,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-15 10:20</div>
+<div class="build-tag">build 2026-07-15 10:25</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -975,7 +975,7 @@ async function updateBenchmark(checkId, avgListeners) {
 }
 
 // ================= Month calendar + list (homepage) =================
-const calState = { anchor: new Date(), mode: 'maand' };
+const calState = { anchor: new Date(), mode: 'week' };
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function isSameDay(a, b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 
