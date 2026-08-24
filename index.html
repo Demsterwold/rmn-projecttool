@@ -367,12 +367,13 @@
 
   /* Shownotes-module */
   .shownotes-panel { max-width: 900px; }
-  .shownotes-top-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .modal:has(.sn-review-modal) { width: 760px; }
+  .shownotes-top-row { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
   .shownotes-top-row select { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 8px 10px; font-size: 13px; min-width: 220px; }
   .shownotes-settings-btn { margin-left: auto; }
-  .shownotes-brand-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12px; color: var(--text-dim); }
+  .shownotes-brand-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; font-size: 12px; color: var(--text-dim); }
   .shownotes-brand-row select { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 6px 8px; font-size: 12px; }
-  .shownotes-dropzone { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 28px; text-align: center; color: var(--text-faint); font-size: 13px; cursor: pointer; margin-bottom: 20px; }
+  .shownotes-dropzone { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 48px 28px; text-align: center; color: var(--text-faint); font-size: 15px; cursor: pointer; margin-bottom: 24px; }
   .shownotes-dropzone:hover, .shownotes-dropzone.drag-active { border-color: var(--accent); color: var(--accent); }
   .shownotes-dropzone input[type="file"] { display: none; }
   .shownotes-upload-progress { margin: -10px 0 20px; font-size: 12px; color: var(--text-dim); }
@@ -394,23 +395,25 @@
   .shownotes-item-delete:hover { color: var(--red); }
 
   .sn-review-modal { max-width: 720px; }
-  .sn-hook-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .sn-review-modal .field { margin-bottom: 20px; }
+  .sn-hook-row { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
   .sn-hook-row input { flex: 1; }
   .sn-charcount { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
   .sn-charcount.over { color: var(--red); font-weight: 700; }
-  .sn-block { border-radius: var(--radius); padding: 14px; margin-bottom: 16px; border: 1.5px solid var(--border); }
+  .sn-block { border-radius: var(--radius); padding: 18px; margin-bottom: 22px; border: 1.5px solid var(--border); }
   .sn-block.audio { border-color: rgba(76,175,125,0.4); }
   .sn-block.youtube { border-color: rgba(226,88,90,0.4); }
-  .sn-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .sn-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .sn-block-head strong { font-size: 13px; }
-  .sn-block textarea { width: 100%; min-height: 160px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 10px; font-size: 13px; font-family: inherit; resize: vertical; }
-  .sn-chapters-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-  .sn-chapter-row { display: flex; gap: 6px; align-items: center; }
+  .sn-block textarea { width: 100%; min-height: 160px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 12px; font-size: 13px; font-family: inherit; resize: vertical; line-height: 1.5; }
+  .sn-chapters-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .sn-chapter-row { display: flex; gap: 8px; align-items: center; }
   .sn-chapter-row input[data-f="time"] { width: 70px; flex-shrink: 0; }
   .sn-chapter-row input[data-f="title"] { flex: 1; }
   .sn-chapter-row button { flex-shrink: 0; }
-  .sn-transcript-block { margin-top: 10px; }
-  .sn-transcript-block textarea { width: 100%; min-height: 200px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text-dim); padding: 10px; font-size: 12px; font-family: var(--mono, monospace); resize: vertical; }
+  .sn-transcript-block { margin-top: 16px; }
+  .sn-transcript-block summary { cursor: pointer; margin-bottom: 10px; }
+  .sn-transcript-block textarea { width: 100%; min-height: 200px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text-dim); padding: 12px; font-size: 12px; font-family: var(--mono, monospace); resize: vertical; line-height: 1.6; }
   .home-sidebar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .home-sidebar h3 { margin: 0; padding: 14px 16px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); border-bottom: 1px solid var(--border); }
   .sidebar-todo { display: flex; align-items: flex-start; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12px; }
@@ -531,7 +534,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-07-16 09:15</div>
+<div class="build-tag">build 2026-07-16 10:00</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
