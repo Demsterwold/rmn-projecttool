@@ -148,21 +148,45 @@ export default async (req) => {
 
 ${namesGlossary ? `Namen/termen die online niet goed te verifi\u00ebren zijn, gebruik deze spelling: ${namesGlossary}\n\n` : ''}BELANGRIJK: hoofdstuktijden mag je UITSLUITEND letterlijk overnemen uit de "[MM:SS]"-tijdstempels die in het transcript staan. Verzin of bereken nooit zelf een tijd.
 
+BELANGRIJK: geef ALTIJD alleen het JSON-object terug, ongeacht hoe kort, onduidelijk of ongebruikelijk het transcript is. Ook bij een heel korte of testachtige opname: doe gewoon je best met wat er is en vul het JSON-formaat in \u2014 geef nooit uitleg, een verontschuldiging, of een vraag om verduidelijking in plaats van JSON.
+
 Transcript (met tijdstempels per zin):
 """
 ${transcript}
 """`;
 
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8000, messages: [{ role: 'user', content: fullPrompt }] })
-    });
-    if (!claudeRes.ok) { const t = await claudeRes.text(); throw new Error('Claude-fout: ' + t.slice(0, 300)); }
-    const claudeData = await claudeRes.json();
-    const raw = (claudeData.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n') || '';
-    const parsed = parseJsonWithFallback(raw);
-    if (!parsed) throw new Error('Kon geen geldige JSON uit het AI-antwoord halen. Probeer het opnieuw.');
+    // Prefill-techniek: door het antwoord van het model zelf te laten beginnen met "{",
+    // kan het bijna niet meer uitwijken naar uitleg of een inleidende zin in plaats van
+    // meteen geldige JSON \u2014 dit is de meest betrouwbare manier om dit af te dwingen.
+    async function callClaudeForShownotes() {
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6', max_tokens: 8000,
+          messages: [
+            { role: 'user', content: fullPrompt },
+            { role: 'assistant', content: '{' }
+          ]
+        })
+      });
+      if (!claudeRes.ok) { const t = await claudeRes.text(); throw new Error('Claude-fout: ' + t.slice(0, 300)); }
+      const claudeData = await claudeRes.json();
+      const continuation = (claudeData.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n') || '';
+      return '{' + continuation; // de "{" die we lieten voorinvullen zit niet in het antwoord, dus terugzetten
+    }
+
+    let parsed = null;
+    let lastRaw = '';
+    for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
+      lastRaw = await callClaudeForShownotes();
+      parsed = parseJsonWithFallback(lastRaw);
+    }
+    if (!parsed) {
+      // Bewaar het daadwerkelijke, onverwerkte antwoord (ingekort) zodat de oorzaak
+      // zichtbaar is in de tool, in plaats van alleen een generieke foutmelding.
+      throw new Error('Kon geen geldige JSON uit het AI-antwoord halen, ook niet na een herhaalde poging. Ruw antwoord: ' + lastRaw.slice(0, 400));
+    }
 
     // 6. Merk automatisch koppelen aan deze aflevering (vanaf het project/de show waar
     // 'm bij hoort), zodat het merkblok in het review-venster altijd klaarstaat.
