@@ -17,13 +17,13 @@ export default async (req) => {
 
     const prompt = `Je krijgt losse aantekeningen/notities (Nederlands), bijvoorbeeld uit een meeting. Haal daar concrete, uitvoerbare taken uit.
 
-Beschikbare kolommen om een taak in te plaatsen:
+Bestaande kolommen om een taak in te plaatsen:
 ${catList}
 
 Geef ALLEEN geldige JSON terug, in dit exacte formaat, zonder uitleg ervoor of erna:
-{"tasks": [{"text": "korte, concrete taakomschrijving", "category": "het bijbehorende kolom-id uit de lijst hierboven"}]}
+{"tasks": [{"text": "korte, concrete taakomschrijving", "category": "het bijbehorende kolom-id uit de lijst hierboven, OF null als er geen bestaande kolom goed past", "new_category_name": "voorstel voor een nieuwe, korte kolomnaam (2-3 woorden) als 'category' null is, anders null"}]}
 
-Kies voor elke taak de kolom die het beste past. Als geen enkele kolom duidelijk past, gebruik dan "overig" (of de eerste kolom uit de lijst als "overig" niet bestaat). Als er geen duidelijke taken in de tekst staan, geef een leeg "tasks"-lijstje terug. Verzin geen taken die niet in de tekst staan.
+Kies voor elke taak de bestaande kolom die het beste past. Past geen enkele bestaande kolom goed (de taken gaan duidelijk over een ander soort onderwerp), stel dan zelf een korte, duidelijke nieuwe kolomnaam voor (bijvoorbeeld "Meetings", "Persoonlijk", "Roularta intern") in plaats van alles in "Overig" te proppen. Taken die logisch bij elkaar horen (bijvoorbeeld allemaal uit dezelfde meeting of over hetzelfde onderwerp) moeten dezelfde nieuwe kolomnaam krijgen. Gebruik alleen "overig" als kolom wanneer een taak echt te divers/eenmalig is om een eigen kolom te verdienen. Als er geen duidelijke taken in de tekst staan, geef een leeg "tasks"-lijstje terug. Verzin geen taken die niet in de tekst staan.
 
 Notities:
 """
