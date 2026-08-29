@@ -97,6 +97,43 @@ function parseJsonWithFallback(raw) {
   return null;
 }
 
+// Aparte, kritische controle: bevat de gegenereerde tekst iets (een naam, team, bocht,
+// gebeurtenis, relatie, claim) dat niet letterlijk in het transcript voorkomt? Dit is
+// bewust een eigen, losse aanroep (net als de naam-verificatie) zodat het model hier
+// puur beoordelend te werk gaat, zonder tegelijk ook nog tekst te moeten schrijven.
+async function checkGrounding(transcript, parsed) {
+  const combinedText = [parsed.hook, parsed.shownotes_audio, parsed.shownotes_youtube, ...(parsed.chapters||[]).map(c=>c.title)].filter(Boolean).join('\n\n');
+  if (!combinedText.trim()) return [];
+  const prompt = `Je krijgt een transcript van een podcast, en een daaruit gegenereerde tekst (shownotes). Controleer STRENG of ALLE genoemde namen, teams, plekken, gebeurtenissen, relaties tussen personen en concrete claims in de gegenereerde tekst daadwerkelijk letterlijk voorkomen in het transcript. Bij twijfel: het telt als een probleem.
+
+Transcript:
+"""
+${transcript}
+"""
+
+Gegenereerde tekst om te controleren:
+"""
+${combinedText}
+"""
+
+Geef ALLEEN JSON terug in dit formaat: {"issues": ["korte beschrijving van elk concreet feit, elke naam of claim in de tekst die NIET in het transcript voorkomt"]}
+Staat alles daadwerkelijk in het transcript? Geef dan een lege lijst terug.`;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6', max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+      output_config: { format: { type: 'json_schema', schema: { type: 'object', properties: { issues: { type: 'array', items: { type: 'string' } } }, required: ['issues'], additionalProperties: false } } }
+    })
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const raw = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n') || '{"issues":[]}';
+  const parsedResult = parseJsonWithFallback(raw);
+  return (parsedResult && Array.isArray(parsedResult.issues)) ? parsedResult.issues : [];
+}
+
 export default async (req) => {
   let shownoteId;
   try {
@@ -146,6 +183,8 @@ export default async (req) => {
 
     const fullPrompt = `${agentPrompt}
 
+KRITIEK, GEEN UITZONDERINGEN: het is ABSOLUUT VERBODEN om zelf informatie te verzinnen of aan te vullen. Noem alleen namen, teams, bochten, locaties, gebeurtenissen, relaties tussen personen, statistieken en andere feiten die LETTERLIJK in het transcript worden genoemd. Als iets niet met zekerheid uit het transcript blijkt, laat het dan volledig weg \u2014 gok nooit en vul nooit aan, ook niet met dingen die je vanuit je eigen kennis over het onderwerp "waarschijnlijk" weet of denkt te weten (zoals de juiste naam van een bocht op een circuit, de actuele samenstelling van een team, of een verhaallijn tussen twee mensen). Twijfel je of iets in het transcript stond? Laat het dan weg. Schrijf ook nooit zelf een website-URL, link of webadres in de lopende tekst \u2014 die worden automatisch door het systeem toegevoegd; noem zelf geen enkele URL.
+
 ${namesGlossary ? `Namen/termen die online niet goed te verifi\u00ebren zijn, gebruik deze spelling: ${namesGlossary}\n\n` : ''}BELANGRIJK: hoofdstuktijden mag je UITSLUITEND letterlijk overnemen uit de "[MM:SS]"-tijdstempels die in het transcript staan. Verzin of bereken nooit zelf een tijd.
 
 Ook bij een heel korte, onduidelijke of testachtige opname: doe gewoon je best met wat er is en vul elk veld in.
@@ -175,13 +214,14 @@ ${transcript}
       required: ['hook','shownotes_audio','shownotes_youtube','chapters','hashtags','tags','hostread_detected','hostread_text','hostread_url'],
       additionalProperties: false
     };
-    async function callClaudeForShownotes() {
+
+    async function callClaudeForShownotes(promptText) {
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6', max_tokens: 8000,
-          messages: [{ role: 'user', content: fullPrompt }],
+          messages: [{ role: 'user', content: promptText }],
           output_config: { format: { type: 'json_schema', schema: shownotesSchema } }
         })
       });
@@ -193,13 +233,31 @@ ${transcript}
     let parsed = null;
     let lastRaw = '';
     for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
-      lastRaw = await callClaudeForShownotes();
+      lastRaw = await callClaudeForShownotes(fullPrompt);
       parsed = parseJsonWithFallback(lastRaw);
     }
     if (!parsed) {
       // Bewaar het daadwerkelijke, onverwerkte antwoord (ingekort) zodat de oorzaak
       // zichtbaar is in de tool, in plaats van alleen een generieke foutmelding.
       throw new Error('Kon geen geldige JSON uit het AI-antwoord halen, ook niet na een herhaalde poging. Ruw antwoord: ' + lastRaw.slice(0, 400));
+    }
+
+    // 5b. Controle-stap: check of alles wat gegenereerd is ook echt letterlijk in het
+    // transcript staat. Dit is een aparte, kritische blik op het eigen resultaat \u2014
+    // wordt er iets gevonden dat niet in het transcript voorkomt, dan wordt de tekst
+    // \u00e9\u00e9n keer opnieuw gegenereerd met die concrete punten als expliciete waarschuwing.
+    try {
+      await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + shownoteId, { progress: 92 });
+      const issues = await checkGrounding(transcript, parsed);
+      if (issues.length) {
+        console.error('Ongegronde content gevonden, opnieuw genereren:', issues);
+        const retryPrompt = fullPrompt + `\n\nLET OP: een eerder gegenereerde versie van deze tekst bevatte de volgende dingen die NIET in het transcript stonden. Laat deze nu zeker weg en verzin ze niet opnieuw, ook niet in een andere vorm:\n${issues.map(i => '- ' + i).join('\n')}`;
+        const retryRaw = await callClaudeForShownotes(retryPrompt);
+        const retryParsed = parseJsonWithFallback(retryRaw);
+        if (retryParsed) parsed = retryParsed;
+      }
+    } catch (e) {
+      console.error('Controle-stap mislukt, ga door met de ongecontroleerde versie:', e.message);
     }
 
     // 6. Merk automatisch koppelen aan deze aflevering (vanaf het project/de show waar
