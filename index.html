@@ -534,7 +534,7 @@
   <div id="detailView" class="hidden"></div>
   <div id="showDetailView" class="hidden"></div>
 </div>
-<div class="build-tag">build 2026-08-24 17:15</div>
+<div class="build-tag">build 2026-08-24 18:10</div>
 <div id="modalRoot"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -593,6 +593,44 @@ function requireOwner() {
     return false;
   }
   return true;
+}
+// Collega-toegang: een gedeeld inlogaccount (e-mail + wachtwoord) dat ALLEEN schrijftoegang
+// geeft tot de Shownotes-tab, los van de hoofdeigenaar-status (Face ID) die de rest van de
+// tool afschermt.
+let isShownotesEditor = false;
+function hasShownotesAccess() { return isOwner || isShownotesEditor; }
+function requireShownotesAccess() {
+  if (!hasShownotesAccess()) {
+    showShownotesLoginModal();
+    return false;
+  }
+  return true;
+}
+function showShownotesLoginModal() {
+  renderModal(`
+    <h2>Inloggen voor Shownotes</h2>
+    <div class="hint">Gebruik het gedeelde collega-account om afleveringen te kunnen uploaden en verwerken.</div>
+    <div class="field"><label>E-mailadres</label><input type="email" id="snLoginEmail" value="dorus.vanmosselveld@roularta.nl"></div>
+    <div class="field"><label>Wachtwoord</label><input type="password" id="snLoginPassword"></div>
+    <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalLogin">Inloggen</button></div>
+  `);
+  document.getElementById('modalCancel').onclick = closeModal;
+  document.getElementById('modalLogin').onclick = async () => {
+    const email = document.getElementById('snLoginEmail').value.trim();
+    const password = document.getElementById('snLoginPassword').value;
+    const btn = document.getElementById('modalLogin');
+    btn.disabled = true; btn.textContent = 'Bezig\u2026';
+    try {
+      const { error } = await authClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      isShownotesEditor = true;
+      closeModal();
+      loadShownotesView();
+    } catch (err) {
+      alert('Inloggen mislukt: ' + err.message);
+      btn.disabled = false; btn.textContent = 'Inloggen';
+    }
+  };
 }
 async function handleAuthClick() {
   if (isOwner) {
@@ -1444,7 +1482,7 @@ async function loadShownotesView() {
             ${shows.map(s => `<option value="show:${s.id}">${escapeHtml(s.name)}</option>`).join('')}
           </optgroup>
         </select>
-        ${isOwner ? `<button class="ghost shownotes-settings-btn" onclick="showShownotesSettingsModal()">\u2699\uFE0F Instellingen</button>` : ''}
+        ${isOwner ? `<button class="ghost shownotes-settings-btn" onclick="showShownotesSettingsModal()">\u2699\uFE0F Instellingen</button>` : (isShownotesEditor ? '<span class="hint" style="margin-left:auto;">\u2713 Ingelogd</span>' : `<button class="ghost" style="margin-left:auto;" onclick="showShownotesLoginModal()">Inloggen</button>`)}
       </div>
       <div id="snBody"><div class="state-msg" style="padding:40px 0;">Kies eerst een podcast hierboven.</div></div>
     </div>
@@ -1496,7 +1534,7 @@ async function onShownotesPodcastChange() {
   __snPollTimer = setInterval(loadShownotesList, 10000);
 }
 async function saveShownoteBrand() {
-  if (!requireOwner()) return;
+  if (!requireShownotesAccess()) return;
   const brandId = document.getElementById('snBrandPicker').value || null;
   try {
     await sbUpdate(window.__snCurrentEntityTable, 'id=eq.' + window.__snCurrentEntityId, { brand_id: brandId });
@@ -1526,13 +1564,13 @@ function shownoteItemHtml(row) {
       </div>
       ${(row.status === 'transcribing' || row.status === 'generating') ? `<div class="shownotes-item-progress"><div class="shownotes-item-progress-fill" style="width:${row.progress||0}%"></div></div>` : ''}
       <span class="shownotes-status-badge sn-status-${row.status}">${SN_STATUS_LABELS[row.status] || row.status}</span>
-      ${(isOwner && row.status === 'error') ? `<button class="small" onclick="event.stopPropagation(); processShownoteUI('${row.id}')">Opnieuw proberen</button>` : ''}
-      ${isOwner ? `<button class="shownotes-item-delete" title="Verwijderen" onclick="event.stopPropagation(); deleteShownoteUI('${row.id}')">\u00d7</button>` : ''}
+      ${(hasShownotesAccess() && row.status === 'error') ? `<button class="small" onclick="event.stopPropagation(); processShownoteUI('${row.id}')">Opnieuw proberen</button>` : ''}
+      ${hasShownotesAccess() ? `<button class="shownotes-item-delete" title="Verwijderen" onclick="event.stopPropagation(); deleteShownoteUI('${row.id}')">\u00d7</button>` : ''}
     </div>
   `;
 }
 async function deleteShownoteUI(id) {
-  if (!requireOwner()) return;
+  if (!requireShownotesAccess()) return;
   if (!confirm('Deze aflevering en de bijbehorende shownotes verwijderen?')) return;
   try {
     const row = (await sbSelect('podcast_shownotes', 'id=eq.' + id + '&select=audio_path,audio_paths'))[0];
@@ -1579,7 +1617,7 @@ function xhrUploadChunk(url, apikey, authToken, contentType, blob, onProgress) {
   });
 }
 async function uploadShownotesAudio(file) {
-  if (!requireOwner()) return;
+  if (!requireShownotesAccess()) return;
   const progressEl = document.getElementById('snUploadProgress');
   progressEl.innerHTML = `<div class="shownotes-upload-progress">Uploaden\u2026 0%<div class="shownotes-upload-progress-bar"><div class="shownotes-upload-progress-fill" id="snUploadFill" style="width:0%"></div></div></div>`;
   try {
