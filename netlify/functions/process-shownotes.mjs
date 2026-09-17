@@ -1,4 +1,5 @@
-// Netlify Background Function: transcribeert een podcast-mp3 met ECHTE tijdstempels,
+// Netlify Background Function: transcribeert een podcastaflevering (mp3 of wav) met
+// ECHTE tijdstempels,
 // verifieert sprekersnamen online, en laat Claude er SEO-shownotes van schrijven voor
 // zowel Spotify/Apple Podcasts als YouTube.
 //
@@ -33,14 +34,167 @@ function sliceBuffer(buf, maxBytes) {
   for (let offset = 0; offset < buf.length; offset += maxBytes) parts.push(buf.subarray(offset, offset + maxBytes));
   return parts;
 }
+
+// ---- MPEG-audio-frame-bewuste splitsing --------------------------------------------
+// BUG DIE HIERMEE WORDT OPGELOST: sliceBuffer() hierboven knipt op een willekeurige
+// bytegrens. Voor een gecomprimeerd mp3-bestand is byte X vrijwel nooit het begin van
+// een audioframe, dus elk stuk NA het eerste begint midden in een frame. Whisper (dat
+// het bestandsformaat detecteert op basis van de eerste paar KB) ziet daar geen geldige
+// mp3-header en antwoordt met "Invalid file format" / duration 0 - precies de fout uit
+// het screenshot. Bij bestanden onder de 20MB werd er nooit gesplitst, dus viel dit
+// nooit op; pas bij langere afleveringen (die WEL over de WHISPER_CHUNK_BYTES-grens
+// gaan) breekt de oude sliceBuffer() de tweede/derde/... chunk kapot.
+// Oplossing: elke knip verschuiven naar het begin van een echt audioframe, zodat elk
+// stuk zelf weer een geldig, decodeerbaar mp3-fragment is.
+const MPEG_BITRATES = {
+  1: { 3: [0,32,64,96,128,160,192,224,256,288,320,352,384,416,448,null], 2: [0,32,48,56,64,80,96,112,128,160,192,224,256,320,384,null], 1: [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,null] },
+  2: { 3: [0,32,48,56,64,80,96,112,128,144,160,176,192,224,256,null], 2: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,null], 1: [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,null] }
+};
+const MPEG_SAMPLERATES = { 3: [44100,48000,32000,null], 2: [22050,24000,16000,null], 0: [11025,12000,8000,null] };
+
+function parseMpegFrameHeader(buf, offset) {
+  if (offset < 0 || offset + 4 > buf.length) return null;
+  const b1 = buf[offset], b2 = buf[offset + 1], b3 = buf[offset + 2];
+  if (b1 !== 0xFF || (b2 & 0xE0) !== 0xE0) return null; // 11-bits sync word
+  const versionBits = (b2 >> 3) & 0x03; // 00=MPEG2.5, 10=MPEG2, 11=MPEG1 (01=reserved)
+  const layerBits = (b2 >> 1) & 0x03;   // 01=Layer III, 10=Layer II, 11=Layer I (00=reserved)
+  if (versionBits === 1 || layerBits === 0) return null;
+  const bitrateIndex = (b3 >> 4) & 0x0F;
+  const sampleIndex = (b3 >> 2) & 0x03;
+  const padding = (b3 >> 1) & 0x01;
+  if (bitrateIndex === 0 || bitrateIndex === 15 || sampleIndex === 3) return null;
+  const versionGroup = versionBits === 3 ? 1 : 2; // MPEG1 vs MPEG2/2.5 (delen dezelfde tabellen)
+  const layerKey = layerBits === 3 ? 3 : (layerBits === 2 ? 2 : 1); // I, II, III
+  const bitrate = MPEG_BITRATES[versionGroup][layerKey][bitrateIndex];
+  const sampleRateGroup = versionBits === 3 ? 3 : (versionBits === 2 ? 2 : 0);
+  const sampleRate = MPEG_SAMPLERATES[sampleRateGroup][sampleIndex];
+  if (!bitrate || !sampleRate) return null;
+  const frameLen = layerKey === 3
+    ? (Math.floor((12 * bitrate * 1000) / sampleRate) + padding) * 4 // Layer I
+    : Math.floor(((versionGroup === 1 ? 144 : 72) * bitrate * 1000) / sampleRate) + padding; // Layer II/III
+  if (frameLen <= 0) return null;
+  return { frameLen };
+}
+
+// Zoekt vanaf fromOffset het dichtstbijzijnde punt dat echt het begin van een
+// audioframe is (gevalideerd door te checken dat de VOLGENDE frame er ook weer een
+// geldige header heeft staan, zodat een toevallige 0xFF-byte in de audiodata niet
+// per ongeluk als startpunt wordt aangezien).
+function findFrameBoundary(buf, fromOffset) {
+  const searchLimit = Math.min(fromOffset + 65536, buf.length); // ruim genoeg om altijd een frame te vinden
+  for (let i = fromOffset; i < searchLimit - 4; i++) {
+    const header = parseMpegFrameHeader(buf, i);
+    if (!header) continue;
+    const next = i + header.frameLen;
+    if (next >= buf.length - 4 || parseMpegFrameHeader(buf, next)) return i;
+  }
+  return -1;
+}
+
+function sliceMp3ByFrames(buf, maxBytes) {
+  const parts = [];
+  let start = 0;
+  while (start < buf.length) {
+    let end = Math.min(start + maxBytes, buf.length);
+    if (end < buf.length) {
+      const boundary = findFrameBoundary(buf, end);
+      if (boundary > start) end = boundary; // geen geldig frame gevonden? dan noodgedwongen op de oude manier knippen
+    }
+    parts.push(buf.subarray(start, end));
+    start = end;
+  }
+  return parts;
+}
 function mmss(totalSeconds) {
   const m = Math.floor(totalSeconds / 60), s = Math.round(totalSeconds % 60);
   return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
 }
 
-async function transcribeChunkWithTimestamps(buffer, filename) {
+// ---- WAV-bewuste splitsing ----------------------------------------------------------
+// Zelfde probleem als bij mp3, maar dan voor WAV: een .wav-bestand is een RIFF-container
+// met precies één header (RIFF/WAVE/fmt /data) gevolgd door de kale samples. Knip je
+// hem op een willekeurige bytegrens, dan mist elk stuk na het eerste die header helemaal
+// en herkent Whisper het niet als geldig audiobestand (dezelfde "Invalid file format").
+// Oplossing: de 'fmt '- en 'data'-chunk opzoeken, en elk stuk knippen op een hele
+// sample-grens (blockAlign) en van een eigen, geldige WAV-header voorzien.
+function parseWavContainer(buf) {
+  if (buf.length < 12 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') return null;
+  let offset = 12, fmt = null, dataOffset = null, dataSize = null;
+  while (offset + 8 <= buf.length) {
+    const id = buf.toString('ascii', offset, offset + 4);
+    const size = buf.readUInt32LE(offset + 4);
+    const bodyStart = offset + 8;
+    if (id === 'fmt ' && bodyStart + 16 <= buf.length) {
+      fmt = {
+        audioFormat: buf.readUInt16LE(bodyStart),
+        numChannels: buf.readUInt16LE(bodyStart + 2),
+        sampleRate: buf.readUInt32LE(bodyStart + 4),
+        byteRate: buf.readUInt32LE(bodyStart + 8),
+        blockAlign: buf.readUInt16LE(bodyStart + 12),
+        bitsPerSample: buf.readUInt16LE(bodyStart + 14)
+      };
+    } else if (id === 'data') {
+      dataOffset = bodyStart;
+      dataSize = Math.min(size, Math.max(buf.length - bodyStart, 0)); // beschermt tegen een onjuiste/afgekapte grootte in de header
+    }
+    if (size < 0 || !Number.isFinite(size)) break; // corrupte header, stop met zoeken
+    offset = bodyStart + size + (size % 2); // chunks zijn op een even aantal bytes uitgelijnd
+  }
+  if (!fmt || dataOffset == null || !fmt.numChannels || !fmt.bitsPerSample) return null;
+  const blockAlign = fmt.blockAlign || Math.max(1, fmt.numChannels * (fmt.bitsPerSample / 8));
+  return { fmt, blockAlign, dataOffset, dataSize };
+}
+
+function buildWavHeader(fmt, dataSize) {
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(fmt.audioFormat || 1, 20);
+  header.writeUInt16LE(fmt.numChannels, 22);
+  header.writeUInt32LE(fmt.sampleRate, 24);
+  header.writeUInt32LE(fmt.byteRate || fmt.sampleRate * (fmt.blockAlign || 1), 28);
+  header.writeUInt16LE(fmt.blockAlign, 32);
+  header.writeUInt16LE(fmt.bitsPerSample, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(dataSize, 40);
+  return header;
+}
+
+// Retourneert null als buf geen (herkenbare) WAV-container is, zodat de aanroeper dat
+// als "geen WAV" kan behandelen.
+function sliceWavByFrames(buf, maxBytes) {
+  const parsed = parseWavContainer(buf);
+  if (!parsed) return null;
+  const { fmt, blockAlign, dataOffset, dataSize } = parsed;
+  const headerRoom = 64; // ruime marge voor de 44-byte header die we per stuk toevoegen
+  const maxPcmBytes = Math.max(blockAlign, Math.floor((maxBytes - headerRoom) / blockAlign) * blockAlign);
+  const parts = [];
+  let start = 0;
+  while (start < dataSize) {
+    const end = Math.min(start + maxPcmBytes, dataSize);
+    const pcm = buf.subarray(dataOffset + start, dataOffset + end);
+    parts.push(Buffer.concat([buildWavHeader(fmt, pcm.length), pcm]));
+    start = end;
+  }
+  return parts.length ? parts : null;
+}
+
+// Herkent of de samengevoegde audio een WAV- of een (ID3-getagde of kale) mp3-stream is,
+// puur op basis van de eerste bytes - onafhankelijk van de bestandsnaam/extensie waarmee
+// hij is geupload (die is niet altijd betrouwbaar).
+function detectAudioFormat(buf) {
+  if (buf.length >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE') return 'wav';
+  if (buf.length >= 3 && buf.toString('ascii', 0, 3) === 'ID3') return 'mp3';
+  if (parseMpegFrameHeader(buf, 0)) return 'mp3';
+  return null;
+}
+
+async function transcribeChunkWithTimestamps(buffer, filename, mimeType) {
   const form = new FormData();
-  form.append('file', new Blob([buffer], { type: 'audio/mpeg' }), filename);
+  form.append('file', new Blob([buffer], { type: mimeType || 'audio/mpeg' }), filename);
   form.append('model', 'whisper-1');
   form.append('language', 'nl');
   form.append('response_format', 'verbose_json');
@@ -144,13 +298,29 @@ export default async (req) => {
     const paths = (row.audio_paths && row.audio_paths.length) ? row.audio_paths : (row.audio_path ? [row.audio_path] : []);
     if (!paths.length) throw new Error('Geen audiobestand gevonden bij deze aflevering.');
 
-    // 1. Alle geuploade stukken ophalen en aan elkaar plakken tot de oorspronkelijke mp3
+    // 1. Alle geuploade stukken ophalen en aan elkaar plakken tot het oorspronkelijke
+    // audiobestand (ongeacht of het een mp3 of wav is - dit is puur byte-concatenatie)
     const buffers = [];
     for (const p of paths) buffers.push(await sbDownloadPrivate('shownotes-audio', p));
     const fullBuffer = Buffer.concat(buffers);
 
-    // 2. Knippen in stukken van max ~20MB voor Whisper (diens limiet is 25MB)
-    const whisperChunks = sliceBuffer(fullBuffer, WHISPER_CHUNK_BYTES);
+    // 2. Bestandsformaat herkennen aan de eerste bytes (niet aan de bestandsnaam, die is
+    // niet altijd betrouwbaar) en op basis daarvan in stukken van max ~20MB knippen voor
+    // Whisper (diens limiet is 25MB). Voor mp3 op audioframe-grenzen, voor wav op hele
+    // sample-grenzen mét een eigen geldige WAV-header per stuk - zie sliceMp3ByFrames()
+    // en sliceWavByFrames() hierboven. Nooit op een willekeurige bytegrens: dan mist elk
+    // stuk na het eerste een geldige header en meldt Whisper "Invalid file format".
+    const audioFormat = detectAudioFormat(fullBuffer);
+    if (!audioFormat) throw new Error('Onherkenbaar audioformaat. Alleen mp3 en wav worden ondersteund.');
+    let whisperChunks, chunkExt, chunkMime;
+    if (audioFormat === 'wav') {
+      whisperChunks = sliceWavByFrames(fullBuffer, WHISPER_CHUNK_BYTES);
+      if (!whisperChunks) throw new Error('Kon de WAV-header niet lezen; het bestand lijkt beschadigd.');
+      chunkExt = 'wav'; chunkMime = 'audio/wav';
+    } else {
+      whisperChunks = sliceMp3ByFrames(fullBuffer, WHISPER_CHUNK_BYTES);
+      chunkExt = 'mp3'; chunkMime = 'audio/mpeg';
+    }
 
     // 3. Transcriberen, SEQUENTIEEL (niet parallel) zodat de gemeten duur van elk stuk
     // correct opgeteld kan worden bij de starttijd van het volgende stuk.
@@ -158,7 +328,7 @@ export default async (req) => {
     const transcriptLines = [];
     for (let i = 0; i < whisperChunks.length; i++) {
       await sbAdmin('PATCH', 'podcast_shownotes?id=eq.' + shownoteId, { progress: Math.round(10 + (i / whisperChunks.length) * 50) });
-      const result = await transcribeChunkWithTimestamps(whisperChunks[i], `deel${i}.mp3`);
+      const result = await transcribeChunkWithTimestamps(whisperChunks[i], `deel${i}.${chunkExt}`, chunkMime);
       (result.segments || []).forEach(seg => {
         transcriptLines.push(`[${mmss(timeOffset + seg.start)}] ${seg.text.trim()}`);
       });
