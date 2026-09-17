@@ -1524,7 +1524,7 @@ async function onShownotesPodcastChange() {
       </select>
     </div>
     <label class="shownotes-dropzone" id="snDropzone" ondragover="event.preventDefault(); this.classList.add('drag-active')" ondragleave="this.classList.remove('drag-active')" ondrop="handleShownotesFileDrop(event)">
-      \u{1F3A7} Sleep een mp3 hierheen, of klik om te kiezen
+      \u{1F3A7} Sleep een mp3 of wav hierheen, of klik om te kiezen
       <input type="file" id="snFileInput" accept="audio/*" onchange="handleShownotesFileSelect()">
     </label>
     <div id="snUploadProgress"></div>
@@ -1616,6 +1616,18 @@ function xhrUploadChunk(url, apikey, authToken, contentType, blob, onProgress) {
     xhr.send(blob);
   });
 }
+function shownotesFileExtension(file) {
+  // Bewaar het echte formaat in de opslagnaam (mp3 of wav) i.p.v. altijd ".mp3" te
+  // forceren - de backend herkent het formaat weliswaar zelf aan de bytes, maar een
+  // kloppende extensie in Supabase-opslag voorkomt verwarring bij het nakijken.
+  const nameExt = (file.name || '').match(/\.([a-zA-Z0-9]+)$/);
+  if (nameExt) {
+    const ext = nameExt[1].toLowerCase();
+    if (ext === 'wav' || ext === 'mp3') return ext;
+  }
+  if (/wav/i.test(file.type || '')) return 'wav';
+  return 'mp3';
+}
 async function uploadShownotesAudio(file) {
   if (!requireShownotesAccess()) return;
   const progressEl = document.getElementById('snUploadProgress');
@@ -1624,6 +1636,7 @@ async function uploadShownotesAudio(file) {
     const { url: SB_URL, key: SB_KEY } = getConfig();
     const authToken = await getAuthToken();
     const baseId = uid('sn');
+    const ext = shownotesFileExtension(file);
     const chunks = [];
     for (let offset = 0; offset < file.size; offset += SN_CHUNK_SIZE) chunks.push(file.slice(offset, offset + SN_CHUNK_SIZE));
     const paths = [];
@@ -1631,7 +1644,7 @@ async function uploadShownotesAudio(file) {
     const totalBytes = file.size;
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      const filename = baseId + '_' + i + '.mp3';
+      const filename = baseId + '_' + i + '.' + ext;
       await xhrUploadChunk(
         `${SB_URL}/storage/v1/object/shownotes-audio/${filename}`,
         SB_KEY, authToken, file.type || 'audio/mpeg', chunk,
