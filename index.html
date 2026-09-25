@@ -1346,7 +1346,7 @@ function renderStatsChart(stats, audioType) {
         <line id="crossLine" x1="0" y1="${padT}" x2="0" y2="${padT+plotH}" stroke="var(--text-faint)" stroke-width="1"/>
       </g>
     </svg>
-    <div class="chart-legend"><span><i style="background:#f4f1ea"></i>Totaal (benchmark)</span><span><i style="background:var(--accent)"></i>Springcast</span><span><i style="background:#c05fd1"></i>YouTube</span></div>
+    <div class="chart-legend"><span><i style="background:#f4f1ea"></i>Totaal (benchmark)</span><span><i style="background:var(--accent)"></i>Audio downloads</span><span><i style="background:#c05fd1"></i>YouTube</span></div>
     <div id="chartTooltip" class="chart-tooltip hidden"></div>
   `;
 }
@@ -1368,7 +1368,7 @@ function handleChartHover(evt) {
   line.setAttribute('x1', geom.xFor(nearest)); line.setAttribute('x2', geom.xFor(nearest));
   const tooltip = document.getElementById('chartTooltip');
   tooltip.classList.remove('hidden');
-  tooltip.innerHTML = `<b>${escapeHtml(s.week_label || ('week '+s.week_number))}</b><br>Totaal: ${total}<br>Springcast: ${s.downloads ?? '\u2013'}<br>YouTube: ${s.youtube_views ?? '\u2013'}`;
+  tooltip.innerHTML = `<b>${escapeHtml(s.week_label || ('week '+s.week_number))}</b><br>Totaal: ${total}<br>Audio downloads: ${s.downloads ?? '\u2013'}<br>YouTube: ${s.youtube_views ?? '\u2013'}`;
   const svgRect = svg.getBoundingClientRect();
   const px = (geom.xFor(nearest)/geom.width)*svgRect.width;
   tooltip.style.left = Math.min(px + 10, svgRect.width - 130) + 'px';
@@ -1395,7 +1395,7 @@ async function editStatWeek(projectId, statId) {
     <h2>Week aanpassen</h2>
     <div class="field"><label>Weeklabel</label><input type="text" id="esWeekLabel" value="${escapeHtml(row.week_label || '')}"></div>
     <div class="field-row">
-      <div class="field"><label>Springcast downloads</label><input type="text" id="esDownloads" value="${row.downloads ?? ''}"></div>
+      <div class="field"><label>Audio downloads</label><input type="text" id="esDownloads" value="${row.downloads ?? ''}"></div>
       <div class="field"><label>YouTube views</label><input type="text" id="esYoutube" value="${row.youtube_views ?? ''}"></div>
     </div>
     <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
@@ -2110,7 +2110,7 @@ function handleCompareChartHover(evt) {
     if (!match) return;
     const name = geom.showMap[showId] ? geom.showMap[showId].name : showId;
     const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
-    html += `<br><span style="color:${color}">${escapeHtml(name)}</span>: ${geom.combinedOf(match)} <span style="color:var(--text-faint)">(Springcast ${match.downloads ?? 0}, YouTube ${match.youtube_views ?? 0})</span>`;
+    html += `<br><span style="color:${color}">${escapeHtml(name)}</span>: ${geom.combinedOf(match)} <span style="color:var(--text-faint)">(Audio downloads ${match.downloads ?? 0}, YouTube ${match.youtube_views ?? 0})</span>`;
   });
   tooltip.innerHTML = html;
   const svgRect = svg.getBoundingClientRect();
@@ -2288,7 +2288,7 @@ async function openShow(showId, fromHistory, isShared) {
         <div class="stats-add-row">
           <input type="text" placeholder="jaar" id="showStatYear_${showId}" style="width:60px;" value="2026">
           <input type="text" placeholder="week" id="showStatWeek_${showId}" style="width:60px;">
-          <input type="number" placeholder="Springcast downloads" id="showStatDownloads_${showId}">
+          <input type="number" placeholder="Audio downloads" id="showStatDownloads_${showId}">
           <input type="number" placeholder="YouTube views" id="showStatYoutube_${showId}">
           <button class="small primary" onclick="addShowStatWeek('${showId}')">Toevoegen</button>
         </div>
@@ -2499,14 +2499,14 @@ function renderStatsMonthPager(showId, groupIndex) {
       <button class="ghost small" ${groupIndex <= 0 ? 'disabled' : ''} onclick="renderStatsMonthPager('${showId}', ${groupIndex-1})">volgende maand \u2192</button>
     </div>
     <div class="stats-month-summary">
-      <span>Springcast: <b>${g.springcastSum.toLocaleString('nl-NL')}</b></span>
+      <span>Audio downloads: <b>${g.springcastSum.toLocaleString('nl-NL')}</b></span>
       <span>YouTube: <b>${g.youtubeSum.toLocaleString('nl-NL')}</b></span>
       <span>Totaal: <b>${g.totalSum.toLocaleString('nl-NL')}</b></span>
     </div>
     <div class="stats-list">${g.weeks.map(s => `
       <div class="stats-list-row">
         <span class="stats-list-week">${s.year} \u00b7 ${escapeHtml(s.week_label || ('week '+s.week_number))}</span>
-        <span class="stats-list-val">Springcast: ${s.downloads ?? '\u2013'}</span>
+        <span class="stats-list-val">Audio downloads: ${s.downloads ?? '\u2013'}</span>
         <span class="stats-list-val">YouTube: ${s.youtube_views ?? '\u2013'}</span>
         <button class="stats-list-btn" onclick="editShowStat('${showId}','${s.id}')">\u270e</button>
         <button class="stats-list-btn" onclick="deleteShowStat('${showId}','${s.id}')">\u00d7</button>
@@ -2516,7 +2516,7 @@ function renderStatsMonthPager(showId, groupIndex) {
 }
 const METRIC_DEFS = [
   { key: 'totaal', label: 'Totaal', color: '#f4f1ea', defaultOn: true },
-  { key: 'springcast', label: 'Springcast', color: '#5b8def', defaultOn: true },
+  { key: 'springcast', label: 'Audio downloads', color: '#5b8def', defaultOn: true },
   { key: 'youtube', label: 'YouTube', color: '#e2585a', defaultOn: true }
 ];
 const YEAR_DASH = { 2026: 'none', 2025: '7,4', 2024: '2,3' };
@@ -2660,7 +2660,7 @@ async function editShowStat(showId, statId) {
       <div class="field"><label>Weeklabel</label><input type="text" id="esWeekLabel" value="${escapeHtml(row.week_label||'')}"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Springcast downloads</label><input type="text" id="esDownloads" value="${row.downloads ?? ''}"></div>
+      <div class="field"><label>Audio downloads</label><input type="text" id="esDownloads" value="${row.downloads ?? ''}"></div>
       <div class="field"><label>YouTube views</label><input type="text" id="esYoutube" value="${row.youtube_views ?? ''}"></div>
     </div>
     <div class="modal-actions"><button class="ghost" id="modalCancel">Annuleren</button><button class="primary" id="modalSave">Opslaan</button></div>
@@ -2743,7 +2743,7 @@ function shareShow(showId) {
   const url = window.location.origin + window.location.pathname + '?showshare=' + showId;
   renderModal(`
     <h2>Luistercijfers delen</h2>
-    <div class="hint">Deze link toont alleen de luistercijfers van deze podcast \u2014 geen to-do's, geen andere podcasts, alleen-lezen. Navigeren tussen jaren en filteren op Springcast/YouTube/Totaal kan wel.</div>
+    <div class="hint">Deze link toont alleen de luistercijfers van deze podcast \u2014 geen to-do's, geen andere podcasts, alleen-lezen. Navigeren tussen jaren en filteren op Audio downloads/YouTube/Totaal kan wel.</div>
     <div class="share-link-box">
       <input type="text" id="shareLinkInput" value="${url}" readonly onclick="this.select()">
       <button class="small primary" id="shareCopyBtn">Kopieer</button>
@@ -3777,7 +3777,7 @@ async function openProject(projectId, isShared, fromHistory) {
       <div id="statsChartWrap">${renderStatsChart(stats, p.audio_type || 'audio')}</div>
       <div class="stats-add-row">
         <input type="text" placeholder="week (bijv. 1)" id="statWeek" style="width:70px;">
-        <input type="number" placeholder="Springcast downloads" id="statDownloads">
+        <input type="number" placeholder="Audio downloads" id="statDownloads">
         <input type="number" placeholder="YouTube views" id="statYoutube">
         <button class="small primary" onclick="addStatWeek('${projectId}')">Toevoegen</button>
       </div>
@@ -3786,7 +3786,7 @@ async function openProject(projectId, isShared, fromHistory) {
           ${stats.map(s => `
             <div class="stats-list-row" id="statrow_${s.id}">
               <span class="stats-list-week">${escapeHtml(s.week_label || ('week '+s.week_number))}</span>
-              <span class="stats-list-val">Springcast: ${s.downloads ?? '\u2013'}</span>
+              <span class="stats-list-val">Audio downloads: ${s.downloads ?? '\u2013'}</span>
               <span class="stats-list-val">YouTube: ${s.youtube_views ?? '\u2013'}</span>
               <button class="stats-list-btn" title="Aanpassen" onclick="editStatWeek('${projectId}','${s.id}')">\u270e</button>
               <button class="stats-list-btn" title="Verwijderen" onclick="deleteStatWeek('${projectId}','${s.id}')">\u00d7</button>
@@ -4468,7 +4468,7 @@ function checkMondayReminder() {
   localStorage.setItem(todayKey, '1');
   renderModal(`
     <h2>\u{1F4C5} Maandagochtend-check</h2>
-    <div class="hint">Tijd om de wekelijkse Springcast/YouTube-cijfers bij te werken. Open Springcast, en zeg tegen Claude "update de weekcijfers" \u2014 dan vult die per lopende podcast alleen de ontbrekende week aan.</div>
+    <div class="hint">Tijd om de wekelijkse Audio downloads/YouTube-cijfers bij te werken. Open Springcast, en zeg tegen Claude "update de weekcijfers" \u2014 dan vult die per lopende podcast alleen de ontbrekende week aan.</div>
     <div class="modal-actions"><button class="primary" id="modalCancel">Begrepen</button></div>
   `);
   document.getElementById('modalCancel').onclick = closeModal;
